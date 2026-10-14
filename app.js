@@ -62,6 +62,12 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const prettyDate = k => parseKey(k).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 const shortDate = k => parseKey(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const u = () => state.unit;
+const timed = ex => ex.type === 'cardio' || ex.type === 'class'; // logged in minutes, not sets
+
+function timeLabel(t) {
+  const [h, m] = t.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
 
 function workoutFor(k) {
   return state.overrides[k] || state.schedule[weekdayIdx(parseKey(k))] || 'REST';
@@ -91,7 +97,7 @@ function filledSets(entry) {
 }
 
 function setsText(ex, entry) {
-  if (ex.type === 'cardio') {
+  if (timed(ex)) {
     const c = entry.cardio;
     const bits = [`${fmtW(num(c.min))} min`];
     if (num(c.incline)) bits.push(`${fmtW(num(c.incline))}% incline`);
@@ -105,7 +111,7 @@ function setsText(ex, entry) {
 // A single number per session, used for PRs: estimated 1-rep max for weighted lifts, reps/seconds/minutes otherwise.
 function score(ex, entry) {
   if (!entryHasData(entry)) return 0;
-  if (ex.type === 'cardio') return num(entry.cardio.min);
+  if (timed(ex)) return num(entry.cardio.min);
   const sets = filledSets(entry);
   return Math.max(0, ...sets.map(s => s.w > 0 ? s.w * (1 + s.r / 30) : s.r));
 }
@@ -115,7 +121,7 @@ const roundTo = (n, step) => Math.round(n / step) * step;
 /* ---------- the smart part: next-session suggestions ---------- */
 
 function suggest(ex, prev) {
-  if (ex.type === 'cardio') return suggestCardio(ex, prev);
+  if (timed(ex)) return suggestCardio(ex, prev);
   const [lo, hi] = ex.reps;
   const range = lo === hi ? `${lo}` : `${lo}–${hi}`;
   const unitR = ex.type === 'time' ? ' sec' : ' reps';
@@ -194,6 +200,14 @@ function suggest(ex, prev) {
 
 function suggestCardio(ex, prev) {
   const goal = ex.goalMin;
+  if (ex.type === 'class') {
+    return {
+      first: !prev,
+      cardio: { min: prev ? num(prev.entry.cardio.min) : goal },
+      msg: prev ? `Last class: ${fmtW(num(prev.entry.cardio.min))} min. Focus on control and breathing.` : 'Log how long the class was. It counts as a completed workout.',
+      goal: null,
+    };
+  }
   if (!prev) {
     const start = Math.min(goal, goal >= 30 ? 30 : 15);
     return {
@@ -227,7 +241,7 @@ function lastSession(exId, beforeK) {
 
 function summarize(startK, endK) {
   const s = {
-    planned: 0, done: 0, sets: 0, volume: 0, legVolume: 0, armReps: 0, cardioMin: 0,
+    planned: 0, done: 0, sets: 0, volume: 0, legVolume: 0, armReps: 0, cardioMin: 0, classMin: 0,
     prs: [], stepsDays: 0, stepsTotal: 0, bw: [], lifts: {}, days: [],
   };
   for (let d = parseKey(startK); key(d) <= endK; d = addDays(d, 1)) {
@@ -245,7 +259,9 @@ function summarize(startK, endK) {
     Object.entries(log.entries).forEach(([exId, entry]) => {
       const ex = EX_BY_ID[exId];
       if (!ex || !entryHasData(entry)) return;
-      if (ex.type === 'cardio') {
+      if (ex.type === 'class') {
+        s.classMin += num(entry.cardio.min);
+      } else if (timed(ex)) {
         s.cardioMin += num(entry.cardio.min);
         dayInfo.cardio += num(entry.cardio.min);
       } else {
@@ -337,7 +353,7 @@ function renderCalendar() {
   app.innerHTML = `
     <section class="hero-today k-${PROGRAM[todayW].kind}">
       <div>
-        <div class="eyebrow">Today · ${esc(shortDate(tk))}</div>
+        <div class="eyebrow">Today · ${esc(shortDate(tk))}${state.daily[tk] && state.daily[tk].time ? ` · ${esc(timeLabel(state.daily[tk].time))}` : ''}</div>
         <h1>${esc(PROGRAM[todayW].name)}</h1>
         <p>${esc(PROGRAM[todayW].blurb)}</p>
       </div>
@@ -397,7 +413,7 @@ function renderDay(k) {
     const sg = suggest(ex, prev);
     const today = log && log.entries && log.entries[ex.id];
     let target;
-    if (ex.type === 'cardio') target = `${fmtW(sg.cardio.min)} min`;
+    if (timed(ex)) target = `${fmtW(sg.cardio.min)} min`;
     else if (sg.w) target = `${fmtW(sg.w)} ${u()} · ${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}`;
     else target = `${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? 's' : ''}`;
     return `<li>
@@ -429,7 +445,8 @@ function renderDay(k) {
 
     <section class="card">
       <h2>Daily check-in</h2>
-      <div class="grid2">
+      <div class="grid3 checkin">
+        <label class="field"><span>Workout time</span><input type="time" data-daily="time" data-k="${k}" value="${esc(daily.time || '')}"></label>
         <label class="field"><span>Steps</span><input type="number" inputmode="numeric" min="0" data-daily="steps" data-k="${k}" value="${esc(daily.steps || '')}" placeholder="${GOALS.stepsPerDay}"></label>
         <label class="field"><span>Body weight (${u()})</span><input type="number" inputmode="decimal" min="0" step="0.1" data-daily="bw" data-k="${k}" value="${esc(daily.bw || '')}" placeholder="optional"></label>
       </div>
@@ -462,22 +479,22 @@ function renderLog(k) {
         <h3>${esc(ex.name)}</h3>
         <span class="tag t-${ex.type}">${TYPE_LABEL[ex.type]}</span>
       </div>
-      <div class="muted">${ex.type === 'cardio' ? `Goal ${ex.goalMin} min` : `${ex.sets} sets × ${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? ' sec' : ''}${ex.each ? ' each side' : ''}`}
+      <div class="muted">${timed(ex) ? `Goal ${ex.goalMin} min` : `${ex.sets} sets × ${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? ' sec' : ''}${ex.each ? ' each side' : ''}`}
         ${prev ? ` · <span class="last">Last (${esc(shortDate(prev.date))}): ${esc(setsText(ex, prev.entry))}</span>` : ''}</div>
       <div class="coach ${sg.bumped ? 'up' : ''} ${sg.first ? 'first' : ''}">
         <span class="coach-ico">${sg.bumped ? '⬆️' : sg.first ? '👋' : '🎯'}</span>
         <div>${esc(sg.msg)}${sg.goal ? `<div class="goal">8-week goal: <b>${esc(sg.goal)}</b></div>` : ''}</div>
       </div>`;
 
-    if (ex.type === 'cardio') {
+    if (timed(ex)) {
       const c = (entry && entry.cardio) || {};
       return `<section class="card ex" data-ex="${ex.id}">${head}
         <div class="grid3">
           <label class="field"><span>Minutes</span><input type="number" inputmode="decimal" min="0" data-c="min" value="${esc(c.min || '')}" placeholder="${fmtW(sg.cardio.min)}"></label>
-          <label class="field"><span>Incline %</span><input type="number" inputmode="decimal" min="0" step="0.5" data-c="incline" value="${esc(c.incline || '')}" placeholder="${fmtW(sg.cardio.incline)}"></label>
-          <label class="field"><span>Speed mph</span><input type="number" inputmode="decimal" min="0" step="0.1" data-c="speed" value="${esc(c.speed || '')}" placeholder="${fmtW(sg.cardio.speed)}"></label>
+          ${ex.type === 'class' ? '' : `<label class="field"><span>Incline %</span><input type="number" inputmode="decimal" min="0" step="0.5" data-c="incline" value="${esc(c.incline || '')}" placeholder="${fmtW(sg.cardio.incline)}"></label>
+          <label class="field"><span>Speed mph</span><input type="number" inputmode="decimal" min="0" step="0.1" data-c="speed" value="${esc(c.speed || '')}" placeholder="${fmtW(sg.cardio.speed)}"></label>`}
         </div>
-        <button class="btn ghost sm" data-act="fill-cardio">Use target</button>
+        <button class="btn ghost sm" data-act="fill-cardio">${ex.type === 'class' ? 'Done' : 'Use target'}</button>
       </section>`;
     }
 
@@ -508,7 +525,7 @@ function renderLog(k) {
       <div class="center"><div class="eyebrow">${esc(shortDate(k))}</div><h1 class="h-sm">${esc(w.name)}</h1></div>
       <span class="icon-btn ghosted"></span>
     </div>
-    <p class="hint">Weights are pre-filled from your last session. Grey numbers are today's rep targets: tap ✓ if you hit it, or type what you did.</p>
+    ${w.ex.every(timed) ? '' : `<p class="hint">Weights are pre-filled from your last session. Grey numbers are today's rep targets: tap ✓ if you hit it, or type what you did.</p>`}
     ${cards}
     <section class="card">
       <label class="field"><span>Notes</span><textarea data-act="notes" rows="2" placeholder="How did it feel?">${esc((log && log.notes) || '')}</textarea></label>
@@ -524,7 +541,7 @@ function readLogFromDom(k) {
   app.querySelectorAll('.card.ex').forEach(card => {
     const exId = card.dataset.ex;
     const ex = EX_BY_ID[exId];
-    if (ex.type === 'cardio') {
+    if (timed(ex)) {
       const c = {};
       card.querySelectorAll('[data-c]').forEach(inp => { c[inp.dataset.c] = inp.value; });
       log.entries[exId] = { cardio: c };
@@ -558,6 +575,7 @@ function statTiles(s, prev) {
     <div class="tile"><span>Workouts</span><b>${s.done}<small>/${s.planned}</small></b>${delta(s.done, prev && prev.done)}</div>
     <div class="tile k-cardio"><span>Cardio</span><b>${fmt(s.cardioMin)}<small> min</small></b>${delta(s.cardioMin, prev && prev.cardioMin, ' min')}</div>
     <div class="tile k-legs"><span>Leg volume</span><b>${fmt(s.legVolume)}<small> ${u()}</small></b>${delta(s.legVolume, prev && prev.legVolume, ' ' + u())}</div>
+    ${s.classMin ? `<div class="tile k-pilates"><span>Pilates</span><b>${fmt(s.classMin)}<small> min</small></b></div>` : ''}
     <div class="tile k-arms"><span>Arm reps</span><b>${fmt(s.armReps)}</b>${delta(s.armReps, prev && prev.armReps)}</div>
     <div class="tile"><span>Sets</span><b>${fmt(s.sets)}</b>${delta(s.sets, prev && prev.sets)}</div>
     <div class="tile"><span>Avg steps</span><b>${s.avgSteps ? fmt(s.avgSteps) : '—'}</b>${s.avgSteps ? delta(s.avgSteps, prev && prev.avgSteps) : ''}</div>
@@ -676,7 +694,7 @@ function renderMonth(mk) {
 }
 
 function renderProgress() {
-  const groups = { heavy: 'Legs · heavier weight', arms: 'Arms · high reps', volume: 'Accessories', bw: 'Bodyweight & core', time: 'Holds', cardio: 'Cardio' };
+  const groups = { heavy: 'Legs · heavier weight', arms: 'Arms · high reps', volume: 'Accessories', bw: 'Bodyweight & core', time: 'Holds', cardio: 'Cardio', class: 'Classes' };
   const seen = new Set();
   let html = '';
   Object.entries(groups).forEach(([type, label]) => {
@@ -723,7 +741,7 @@ function renderProgram() {
         <h2>${esc(w.name)}</h2>
         <p class="muted">${esc(w.blurb)}</p>
         <ul class="ex-list">${w.ex.map(ex => `<li><div><b>${esc(ex.name)}</b><span class="tag t-${ex.type}">${TYPE_LABEL[ex.type]}</span></div>
-          <div class="muted">${ex.type === 'cardio' ? `${ex.goalMin} min` : `${ex.sets} × ${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? ' sec' : ''}${ex.each ? ' each side' : ''}`}</div></li>`).join('')}</ul>
+          <div class="muted">${timed(ex) ? `${ex.goalMin} min` : `${ex.sets} × ${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? ' sec' : ''}${ex.each ? ' each side' : ''}`}</div></li>`).join('')}</ul>
       </section>`).join('')}
     <section class="card">
       <h2>Data</h2>

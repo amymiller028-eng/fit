@@ -15,6 +15,8 @@
   --pump-soft: #ece4fa;
   --cardio: #d9772b;
   --cardio-soft: #fcebdc;
+  --pilates: #3f7cb8;
+  --pilates-soft: #e1ecf8;
   --rest: #8f8489;
   --rest-soft: #eeeaeb;
   --gold: #b8860b;
@@ -44,6 +46,8 @@
     --pump-soft: #33284a;
     --cardio: #f0a15f;
     --cardio-soft: #44301e;
+    --pilates: #7fb2e8;
+    --pilates-soft: #1f3247;
     --rest: #a89ca2;
     --rest-soft: #312a33;
     --gold: #e6bd4a;
@@ -57,7 +61,7 @@
 :root[data-theme="dark"] {
   --bg: #17121a; --surface: #221b25; --surface-2: #2c2430; --text: #f4ecef; --muted: #b0a2aa; --line: #3a3040;
   --primary: #ec6b9c; --primary-ink: #1b0f15; --legs: #ec6b9c; --legs-soft: #45222f; --arms: #4fc4b5; --arms-soft: #193a37;
-  --pump: #b391f0; --pump-soft: #33284a; --cardio: #f0a15f; --cardio-soft: #44301e; --rest: #a89ca2; --rest-soft: #312a33;
+  --pump: #b391f0; --pump-soft: #33284a; --cardio: #f0a15f; --cardio-soft: #44301e; --pilates: #7fb2e8; --pilates-soft: #1f3247; --rest: #a89ca2; --rest-soft: #312a33;
   --gold: #e6bd4a; --gold-soft: #3d3218; --pos: #5fd19a; --neg: #f08a80; color-scheme: dark;
 }
 
@@ -91,6 +95,7 @@ p { margin: 6px 0 0; }
 .k-arms { --k: var(--arms); --k-soft: var(--arms-soft); }
 .k-pump { --k: var(--pump); --k-soft: var(--pump-soft); }
 .k-cardio { --k: var(--cardio); --k-soft: var(--cardio-soft); }
+.k-pilates { --k: var(--pilates); --k-soft: var(--pilates-soft); }
 .k-rest { --k: var(--rest); --k-soft: var(--rest-soft); }
 
 .card {
@@ -196,6 +201,7 @@ p { margin: 6px 0 0; }
 .tag.t-heavy { background: var(--legs-soft); color: var(--legs); }
 .tag.t-arms { background: var(--arms-soft); color: var(--arms); }
 .tag.t-cardio { background: var(--cardio-soft); color: var(--cardio); }
+.tag.t-class { background: var(--pilates-soft); color: var(--pilates); }
 
 /* forms */
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
@@ -206,6 +212,7 @@ input, select, textarea {
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+@media (max-width: 440px) { .grid3.checkin { grid-template-columns: 1fr 1fr; } .grid3.checkin .field:first-child { grid-column: 1 / -1; } }
 .grid3 + .btn { margin-top: 10px; }
 
 /* log */

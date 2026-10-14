@@ -98,6 +98,13 @@ const PROGRAM = {
       { id: 'walk-e', name: 'Incline walk finisher', type: 'cardio', goalMin: 20 },
     ],
   },
+  PILATES: {
+    id: 'PILATES', name: 'Pilates', short: 'Pilates', kind: 'pilates',
+    blurb: 'Core, control and mobility. A great swap for any day.',
+    ex: [
+      { id: 'pilates-class', name: 'Pilates class', type: 'class', goalMin: 50 },
+    ],
+  },
   CARDIO: {
     id: 'CARDIO', name: 'Cardio Day', short: 'Cardio', kind: 'cardio',
     blurb: 'Long, conversational-pace cardio. Build minutes first.',
@@ -130,4 +137,5 @@ const TYPE_LABEL = {
   bw: 'Bodyweight',
   time: 'Hold',
   cardio: 'Cardio',
+  class: 'Class',
 };
