@@ -67,6 +67,7 @@ function moneyTabs(active) {
 }
 
 function renderSpend() {
+  shareNoSpendDates();
   const today = todayKey();
   if (!spendDay) spendDay = today;
   if (!spendMonth) spendMonth = new Date(parseKey(spendDay).getFullYear(), parseKey(spendDay).getMonth(), 1);
@@ -235,8 +236,15 @@ app.addEventListener('click', async e => {
       if (streak && streak % 5 === 0) confetti();
     }
     await saveVault(); keepScroll(renderSpend);
+    shareNoSpendDates();
   }
 });
+
+// The wishlist can be earned with no-spend days, so share just their dates (no amounts, no purchases).
+function shareNoSpendDates() {
+  const dates = Object.keys(vault.noSpend || {}).filter(k => vault.noSpend[k]).sort();
+  if (JSON.stringify(dates) !== JSON.stringify(state.noSpendDates || [])) { state.noSpendDates = dates; save(); }
+}
 
 function noSpendThisMonth() {
   const mk = monthKey(parseKey(spendDay));
@@ -264,6 +272,7 @@ app.addEventListener('submit', async e => {
   spendList().push(entry);
   if (vault.noSpend && vault.noSpend[entry.date]) delete vault.noSpend[entry.date];
   await saveVault();
+  shareNoSpendDates();
   keepScroll(renderSpend);
   toast(`${money2(entry.amount)} ${entry.note} · ${entry.method}`);
 });

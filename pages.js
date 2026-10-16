@@ -704,6 +704,29 @@ function safeUrl(u) {
   try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ''; } catch (e) { return ''; }
 }
 
+// No-spend days come from the locked Money section, which shares only their dates (see spend.js).
+function noSpendSince(k) {
+  return (state.noSpendDates || []).filter(d => d >= k).length;
+}
+
+const WISH_GOALS = { workouts: 'workouts', nospend: 'no-spend days' };
+const wishProgress = x => (x.goalType === 'nospend' ? noSpendSince(x.added) : workoutsSince(x.added));
+const wishEarned = x => !!x.goal && wishProgress(x) >= x.goal;
+let wishEditing = null;
+
+function wishFields(x) {
+  return `
+    <label class="field"><span>What is it?</span><input name="name" required maxlength="60" value="${esc(x.name || '')}" placeholder="e.g. Ribbed matching set"></label>
+    <div class="grid2">
+      <label class="field"><span>Price $</span><input name="price" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(x.price || '')}"></label>
+      <label class="field"><span>Link (optional)</span><input name="url" type="text" inputmode="url" autocomplete="off" value="${esc(x.url || '')}" placeholder="Paste a link"></label>
+    </div>
+    <div class="earn-row">
+      <label class="field"><span>Earn it after</span><input name="goal" type="number" inputmode="numeric" min="0" value="${esc(x.goal || '')}" placeholder="#"></label>
+      <label class="field"><span>&nbsp;</span><select name="goalType">${Object.entries(WISH_GOALS).map(([k, v]) => `<option value="${k}" ${(x.goalType || 'workouts') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    </div>`;
+}
+
 function renderWish() {
   const list = state.wish || [];
   const open = list.filter(x => !x.bought);
@@ -712,24 +735,31 @@ function renderWish() {
   let celebrate = false;
 
   const card = x => {
-    const done = x.goal ? workoutsSince(x.added) : 0;
-    const earned = x.goal && done >= x.goal;
+    if (wishEditing === x.id) {
+      return `<article class="wish editing"><form data-form="wish-edit" data-id="${x.id}">${wishFields(x)}
+        <div class="row-btns left"><button class="btn primary sm" type="submit">Save</button><button class="btn ghost sm" type="button" data-act="wish-cancel">Cancel</button></div>
+      </form></article>`;
+    }
+    const done = x.goal ? wishProgress(x) : 0;
+    const earned = wishEarned(x);
     if (earned && !x.celebrated && !x.bought) { x.celebrated = true; celebrate = true; }
     return `<article class="wish ${earned ? 'earned' : ''} ${x.bought ? 'bought' : ''}">
       <h3>${esc(x.name)}</h3>
       ${num(x.price) ? `<div class="price">$${r1(num(x.price)).toLocaleString()}</div>` : ''}
       ${x.goal && !x.bought ? `<div class="earn">
-          <div class="fbar"><i style="width:${Math.min(100, done / x.goal * 100)}%"></i></div>
-          <small>${earned ? '<span class="earned-tag">Earned. Treat yourself.</span>' : `${done} / ${x.goal} workouts to earn it`}</small>
+          <div class="fbar ${x.goalType === 'nospend' ? 'nospend' : ''}"><i style="width:${Math.min(100, done / x.goal * 100)}%"></i></div>
+          <small>${earned ? '<span class="earned-tag">Earned. Treat yourself.</span>' : `${done} / ${x.goal} ${WISH_GOALS[x.goalType || 'workouts']} to earn it`}</small>
         </div>` : ''}
       <div class="wish-actions">
         ${x.url ? `<a class="btn ghost sm" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">View</a>` : ''}
         <button class="btn ${x.bought ? 'ghost' : 'primary'} sm" data-act="wish-bought" data-id="${x.id}">${x.bought ? 'Undo' : 'Bought'}</button>
+        <button class="btn ghost sm" data-act="wish-edit" data-id="${x.id}">Edit</button>
         <button class="x" data-act="wish-del" data-id="${x.id}" aria-label="Remove ${esc(x.name)}">✕</button>
       </div>
     </article>`;
   };
 
+  const usesNoSpend = list.some(x => x.goalType === 'nospend' && !x.bought);
   app.innerHTML = `
     <div class="page-head">
       <h1 class="page-title">Wishlist</h1>
@@ -737,18 +767,13 @@ function renderWish() {
     </div>
     <details class="card juicy add-wish" ${list.length ? '' : 'open'}>
       <summary><b>Add an item</b></summary>
-      <form data-form="wish-add">
-        <label class="field"><span>What is it?</span><input name="name" required maxlength="60" placeholder="e.g. Ribbed matching set"></label>
-        <div class="grid2">
-          <label class="field"><span>Price $</span><input name="price" type="number" inputmode="decimal" min="0" step="0.01"></label>
-          <label class="field"><span>Earn it after</span><input name="goal" type="number" inputmode="numeric" min="0" placeholder="# workouts"></label>
-        </div>
-        <label class="field"><span>Link (optional)</span><input name="url" type="text" inputmode="url" autocomplete="off" placeholder="Paste a link"></label>
+      <form data-form="wish-add">${wishFields({})}
         <button class="btn primary block" type="submit">Add to wishlist</button>
       </form>
     </details>
-    ${open.length ? `<div class="wish-grid">${open.sort((a, b) => (b.goal && workoutsSince(b.added) >= b.goal) - (a.goal && workoutsSince(a.added) >= a.goal)).map(card).join('')}</div>`
-      : `<div class="empty"><p>Add clothes, gear and treats. Set a workout goal to <b>earn</b> each one.</p></div>`}
+    ${usesNoSpend ? `<p class="muted wish-note">No-spend days count from the day you add an item. They update each time you open Money.</p>` : ''}
+    ${open.length ? `<div class="wish-grid">${open.sort((a, b) => wishEarned(b) - wishEarned(a)).map(card).join('')}</div>`
+      : `<div class="empty"><p>Add clothes, gear and treats. Earn each one with workouts or no-spend days.</p></div>`}
     ${bought.length ? `<details class="card"><summary><b>Bought (${bought.length})</b></summary><div class="wish-grid">${bought.map(card).join('')}</div></details>` : ''}
   `;
   if (celebrate) { save(); confetti(); toast('You earned something on your wishlist'); }
@@ -819,6 +844,8 @@ app.addEventListener('click', e => {
     if (x.bought) toast('Enjoy it');
     renderWish();
   }
+  if (act === 'wish-edit') { wishEditing = t.dataset.id; const y = window.scrollY; renderWish(); window.scrollTo(0, y); }
+  if (act === 'wish-cancel') { wishEditing = null; const y = window.scrollY; renderWish(); window.scrollTo(0, y); }
   if (act === 'wish-del' && confirm('Remove this from your wishlist?')) {
     state.wish = state.wish.filter(x => x.id !== t.dataset.id); save(); renderWish();
   }
@@ -887,8 +914,19 @@ app.addEventListener('submit', e => {
     if (!state.wish) state.wish = [];
     state.wish.unshift({
       id: uid(), name: d.name.trim(), price: d.price, url: safeUrl(d.url),
-      goal: Math.max(0, Math.round(num(d.goal))), added: todayKey(), bought: false,
+      goal: Math.max(0, Math.round(num(d.goal))), goalType: d.goalType || 'workouts', added: todayKey(), bought: false,
     });
     save(); toast('Added to your wishlist'); renderWish();
+  }
+  if (form === 'wish-edit') {
+    const x = (state.wish || []).find(w => w.id === f.dataset.id);
+    if (!x) return;
+    const goal = Math.max(0, Math.round(num(d.goal)));
+    const goalType = d.goalType || 'workouts';
+    // A new goal means a fresh chance to celebrate when it's reached.
+    if (goal !== x.goal || goalType !== (x.goalType || 'workouts')) x.celebrated = false;
+    Object.assign(x, { name: d.name.trim() || x.name, price: d.price, url: safeUrl(d.url), goal, goalType });
+    wishEditing = null;
+    save(); toast('Saved'); const y = window.scrollY; renderWish(); window.scrollTo(0, y);
   }
 });

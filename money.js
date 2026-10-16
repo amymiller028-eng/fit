@@ -176,6 +176,7 @@ function renderMoney() {
   if (!vault) return renderLockScreen();
   touchVault();
   if (location.hash.startsWith('#/money/spend')) return renderSpend();
+  shareNoSpendDates();
   const debts = vault.debts;
   if (!debts.length && !moneyUi.adding) return renderMoneyWelcome();
 
