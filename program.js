@@ -105,12 +105,26 @@ const PROGRAM = {
       { id: 'pilates-class', name: 'Pilates class', type: 'class', goalMin: 50 },
     ],
   },
+  HIIT: {
+    id: 'HIIT', name: 'HIIT class', short: 'HIIT', kind: 'cardio',
+    blurb: 'High-intensity intervals.',
+    ex: [{ id: 'hiit-class', name: 'HIIT class', type: 'class', goalMin: 45 }],
+  },
+  SPIN: {
+    id: 'SPIN', name: 'Spin class', short: 'Spin', kind: 'cardio',
+    blurb: 'Indoor cycling.',
+    ex: [{ id: 'spin-class', name: 'Spin class', type: 'class', goalMin: 45 }],
+  },
+  YOGA: {
+    id: 'YOGA', name: 'Yoga', short: 'Yoga', kind: 'pilates',
+    blurb: 'Stretch, breathe, recover.',
+    ex: [{ id: 'yoga-class', name: 'Yoga', type: 'class', goalMin: 60 }],
+  },
   CARDIO: {
     id: 'CARDIO', name: 'Cardio Day', short: 'Cardio', kind: 'cardio',
-    blurb: 'Long, conversational-pace cardio. Build minutes first.',
+    blurb: 'Incline walk, StairMaster, bike, run: log whatever you did.',
     ex: [
-      { id: 'long-walk', name: 'Incline walk or StairMaster', type: 'cardio', goalMin: 45 },
-      { id: 'intervals', name: 'Intervals (bike or rower), optional', type: 'cardio', goalMin: 15 },
+      { id: 'long-walk', name: 'Incline / treadmill walk', type: 'cardio', goalMin: 45 },
     ],
   },
   REST: {
@@ -162,12 +176,16 @@ const EXTRA_GROUPS = [
     { id: 'side-plank', name: 'Side plank', type: 'time', sets: 3, reps: [30, 45], each: true },
   ] },
   { label: 'Cardio', ex: [
+    { id: 'intervals', name: 'Intervals (bike or rower)', type: 'cardio', goalMin: 15 },
     { id: 'stairmaster', name: 'StairMaster', type: 'cardio', goalMin: 20 },
     { id: 'bike', name: 'Bike', type: 'cardio', goalMin: 20 },
     { id: 'elliptical', name: 'Elliptical', type: 'cardio', goalMin: 20 },
     { id: 'run', name: 'Run', type: 'cardio', goalMin: 20 },
     { id: 'row-machine', name: 'Rowing machine', type: 'cardio', goalMin: 15 },
     { id: 'outdoor-walk', name: 'Outdoor walk', type: 'cardio', goalMin: 30 },
+    { id: 'huey-walk', name: 'Walk with Huey', type: 'cardio', goalMin: 30 },
+    { id: 'jog', name: 'Jog', type: 'cardio', goalMin: 20 },
+    { id: 'hike', name: 'Hike', type: 'cardio', goalMin: 60 },
   ] },
 ];
 
@@ -175,6 +193,7 @@ const EXTRA_GROUPS = [
 const DEFAULT_SCHEDULE = ['A', 'B', 'C', 'D', 'E', 'CARDIO', 'REST'];
 
 const GOALS = {
+  workoutsPerWeek: 5,
   stepsPerDay: 10000,
   cardioMinPerWeek: 150,
   calories: 1575,
@@ -191,3 +210,6 @@ const TYPE_LABEL = {
   cardio: 'Cardio',
   class: 'Class',
 };
+
+// What you can pick on a Cardio Day, in the order they're shown.
+const CARDIO_CHOICES = ['huey-walk', 'outdoor-walk', 'long-walk', 'jog', 'run', 'hike', 'stairmaster', 'bike', 'elliptical', 'row-machine'];

@@ -193,7 +193,7 @@ body[data-section="workouts"] .btn.primary::after {
 /* main nav: bottom bar on phones, sidebar on desktop */
 .sidenav {
   position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 20;
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line); border-radius: 22px; padding: 6px; box-shadow: var(--shadow);
@@ -489,7 +489,7 @@ details.prog summary .muted { margin-left: auto; }
 .store-list { list-style: none; padding: 0; margin: 0 0 6px; }
 .store-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .store-list label { flex: 1; display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 6px 0; font-size: 15px; }
-.store-list input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.store-list input[type="checkbox"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .bubble {
   width: 26px; height: 26px; flex: none; border-radius: 50%; border: 3px solid var(--primary-2); background: var(--surface);
   display: flex; align-items: center; justify-content: center; transition: .2s;
@@ -888,7 +888,7 @@ body[data-section="workouts"] .btn.ghost { border-width: 2px; }
 }
 .store-list .sn:hover { background: var(--surface-2); }
 .store-list li.done .sn { text-decoration: line-through; color: var(--muted); }
-.store-list .sn-edit { flex: 1; min-width: 0; padding: 7px 10px; font-size: 15px; border-color: var(--primary-2); }
+.store-list .sn-edit { position: static; opacity: 1; width: auto; height: auto; flex: 1; min-width: 0; padding: 7px 10px; font-size: 15px; font-weight: 500; border-color: var(--primary-2); }
 
 /* more than one workout a day */
 .plus-n { position: absolute; top: 3px; left: 4px; font-size: 9px; font-weight: 700; color: var(--primary); }
@@ -897,3 +897,76 @@ body[data-section="workouts"] .btn.ghost { border-width: 2px; }
 .add-workout h3 { margin-top: 0; }
 .log-group { margin: 22px 0 10px; font-size: 20px; }
 .card .btn.block[data-act="quick-done"] { margin-top: 12px; }
+
+/* day page: pick a workout, logged cards with a summary */
+.day-workout .dw-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.day-workout .dw-head h2 { margin: 0; }
+.pending-tag { font-size: 12px; font-weight: 600; color: var(--muted); }
+.dw-summary { margin-top: 10px; }
+.dw-summary summary { color: var(--primary); font-weight: 600; font-size: 14px; }
+.dw-summary .ex-list { margin-top: 6px; }
+.day-workout .row-btns { margin-top: 12px; }
+.add-workout-btn { margin: 0 0 16px; }
+.pick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+@media (min-width: 640px) { .pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pick {
+  text-align: left; font: inherit; color: var(--text); background: var(--k-soft); border: 2px solid transparent;
+  border-radius: 16px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: transform .12s, border-color .12s;
+}
+.pick b { color: var(--k); font-family: var(--head); font-size: 16px; font-weight: 600; }
+.pick small { color: var(--muted); font-size: 12px; }
+.pick:hover { border-color: var(--k); transform: translateY(-1px); }
+
+/* ---------- Amy & Cory calendar ---------- */
+.who-Both { --who: #8a5cd0; --who-soft: #efe7fb; }
+.who-Amy { --who: #c2477a; --who-soft: #fbe6ef; }
+.who-Cory { --who: #3a7fb8; --who-soft: #e3eff9; }
+.who-Huey { --who: #6f7782; --who-soft: #eceef1; }
+.us-cal { gap: 4px; }
+.ucell {
+  min-height: 76px; border-radius: 12px; border: 1px solid transparent; background: var(--surface-2); color: var(--text);
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 5px 4px; font: inherit; cursor: pointer; text-align: left; min-width: 0;
+}
+.ucell .dnum { font-size: 13px; font-weight: 600; padding-left: 2px; }
+.ucell.out { opacity: .4; }
+.ucell.today { border-color: var(--primary); }
+.ucell.sel { box-shadow: 0 0 0 3px var(--primary-2); background: var(--surface); }
+.ev {
+  display: block; font-size: 10.5px; font-weight: 600; line-height: 1.3; padding: 1px 5px; border-radius: 6px;
+  background: var(--who-soft); color: var(--who); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ev-more { font-size: 10px; color: var(--muted); padding-left: 4px; }
+.us-legend .sw { background: var(--who); border-radius: 50%; }
+.us-list { list-style: none; padding: 0; margin: 4px 0 0; }
+.us-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.us-list li:first-child { border-top: 0; }
+.us-list li.editing { display: block; }
+.us-list.upcoming li { cursor: pointer; }
+.dot-who { width: 12px; height: 12px; flex: none; border-radius: 50%; background: var(--who); }
+.ul-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.us-form { display: grid; gap: 10px; padding: 6px 0 12px; }
+.us-form .grid2 { margin-top: 0; }
+.who-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.who-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.who-chip span {
+  display: inline-block; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--who); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.who-chip input:checked + span { background: var(--who); color: #fff; border-color: var(--who); }
+.who-chip input:focus-visible + span { outline: 3px solid var(--primary-2); }
+@media (max-width: 440px) {
+  .ucell { min-height: 62px; padding: 4px 2px; }
+  .ev { font-size: 9px; padding: 1px 3px; }
+  .sidenav [data-tab] { font-size: 9.5px; }
+}
+
+/* Cardio Day logger */
+.cardio-done { list-style: none; padding: 0; margin: 10px 0 0; }
+.cardio-done li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px dotted var(--line); }
+.cardio-done li:first-child { border-top: 0; }
+.cardio-done li .muted { flex: 1; }
+.cardio-logger { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.activity-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.activity-chips .mchip.on { background: var(--cardio); border-color: var(--cardio); color: #fff; box-shadow: none; }
+.cardio-inputs { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+@media (max-width: 440px) { .cardio-inputs { grid-template-columns: 1fr 1fr; } .cardio-inputs .btn { grid-column: 1 / -1; } }

@@ -18,6 +18,7 @@ function blankState() {
     store: [],     // [{ id, name, cat, done }]
     trips: [],     // finished shopping trips: [{ id, date, at, items: [{ name, cat }] }]
     wish: [],      // [{ id, name, price, url, e, goal, added, bought }]
+    events: [],    // Amy & Cory calendar: [{ id, date, time, title, who, note }]
   };
 }
 
@@ -54,11 +55,17 @@ EXTRA_GROUPS.forEach(g => g.ex.forEach(ex => { if (!EX_BY_ID[ex.id]) EX_BY_ID[ex
 // Any exercise by id, including ones you created yourself.
 const exDef = id => EX_BY_ID[id] || (state.customEx && state.customEx[id]) || null;
 
-// The day's workouts: the planned (or swapped) one first, then any you added with "Add another workout".
+// The workouts you picked for a day. Nothing is planned ahead: a day is empty until you choose one.
 function dayWorkouts(k) {
   const log = state.logs[k];
-  return [workoutFor(k), ...((log && log.also) || [])].filter((id, i, a) => PROGRAM[id] && a.indexOf(id) === i);
+  if (!log || !log.w) return [];
+  return [log.w, ...(log.also || [])].filter((id, i, a) => PROGRAM[id] && id !== 'REST' && a.indexOf(id) === i);
 }
+
+const workoutLogged = (k, id) => {
+  const log = state.logs[k];
+  return !!log && logExerciseGroups(k).some(g => g.id === id && g.exs.some(ex => entryHasData(log.entries[ex.id])));
+};
 
 // Every exercise for the day, tagged with the workout it belongs to. Added workouts skip their incline-walk
 // finisher when the day already has one.
@@ -70,8 +77,17 @@ function logExerciseGroups(k) {
     exs.forEach(ex => seen.add(ex.id));
     return { id, title: PROGRAM[id].name, exs };
   });
-  const extra = ((log && log.extra) || []).map(exDef).filter(x => x && !seen.has(x.id));
-  if (extra.length) groups.push({ id: 'extra', title: 'Added exercises', exs: extra });
+  const loggedIds = Object.keys((log && log.entries) || {}).filter(id => entryHasData(log.entries[id]));
+  const extra = [...new Set([...((log && log.extra) || []), ...loggedIds])].map(exDef).filter(x => x && !seen.has(x.id) && (seen.add(x.id) || true));
+  if (extra.length) {
+    // Cardio goes with the Cardio Day if there is one; other added exercises go with the latest workout of the day.
+    const cardioGroup = groups.find(g => g.id === 'CARDIO');
+    extra.forEach(x => {
+      const target = cardioGroup && x.type === 'cardio' ? cardioGroup : groups[groups.length - 1];
+      if (target) target.exs.push(x);
+      else groups.push({ id: 'extra', title: 'Added exercises', exs: [x] });
+    });
+  }
   return groups.filter(g => g.exs.length);
 }
 
@@ -145,6 +161,7 @@ function setsText(ex, entry) {
     const bits = [`${fmtW(num(c.min))} min`];
     if (num(c.incline)) bits.push(`${fmtW(num(c.incline))}% incline`);
     if (num(c.speed)) bits.push(`${fmtW(num(c.speed))} mph`);
+    if (num(c.miles)) bits.push(`${fmtW(num(c.miles))} mi`);
     return bits.join(' · ');
   }
   const unit = ex.type === 'time' ? 's' : '';
@@ -325,8 +342,7 @@ function summarize(startK, endK) {
   };
   for (let d = parseKey(startK); key(d) <= endK; d = addDays(d, 1)) {
     const k = key(d);
-    const wid = workoutFor(k);
-    if (wid !== 'REST') s.planned++;
+    const wid = dayWorkouts(k)[0] || null;
     const daily = state.daily[k];
     if (daily && num(daily.steps)) { s.stepsDays++; s.stepsTotal += num(daily.steps); }
     if (daily && num(daily.bw)) s.bw.push({ date: k, bw: num(daily.bw) });
@@ -373,6 +389,7 @@ function summarize(startK, endK) {
     });
   }
   s.avgSteps = s.stepsDays ? s.stepsTotal / s.stepsDays : 0;
+  s.planned = Math.max(1, Math.round(s.days.length / 7 * GOALS.workoutsPerWeek));
   return s;
 }
 
@@ -396,7 +413,7 @@ function chip(wid, extra = '') {
 function render() {
   const [route, arg] = location.hash.replace(/^#\/?/, '').split('/');
   window.scrollTo(0, 0);
-  const section = ['store', 'food', 'wish', 'money'].includes(route) ? route : 'workouts';
+  const section = ['store', 'food', 'wish', 'money', 'us'].includes(route) ? route : 'workouts';
   document.querySelectorAll('[data-tab]').forEach(a => a.classList.toggle('on', a.dataset.tab === section));
   document.body.dataset.section = section;
   document.querySelectorAll('[data-sub]').forEach(a => a.classList.toggle('on', a.dataset.sub === (route || 'cal')));
@@ -405,6 +422,7 @@ function render() {
     case 'food': return renderFood(arg || todayKey());
     case 'wish': return renderWish();
     case 'money': return renderMoney();
+    case 'us': return renderUs(arg);
     case 'day': return renderDay(arg || todayKey());
     case 'log': return renderLog(arg || todayKey());
     case 'week': return renderWeek(arg || key(mondayOf(new Date())));
@@ -466,7 +484,6 @@ function renderCalendar() {
   const tk = todayKey();
   const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
   const start = mondayOf(first);
-  const todayW = workoutFor(tk);
   const todayLog = state.logs[tk];
 
   let cells = '';
@@ -474,14 +491,14 @@ function renderCalendar() {
     const d = addDays(start, i);
     if (i === 35 && d.getMonth() !== viewMonth.getMonth()) break;
     const k = key(d);
-    const wid = workoutFor(k);
+    const ids = dayWorkouts(k);
     const log = state.logs[k];
     const done = logHasData(log) && log.done;
     const started = logHasData(log) && !log.done;
     const cls = ['cell', d.getMonth() !== viewMonth.getMonth() ? 'out' : '', k === tk ? 'today' : '', k < tk ? 'past' : ''].join(' ');
-    cells += `<a class="${cls}" href="#/day/${k}" aria-label="${esc(prettyDate(k))}, ${esc(PROGRAM[wid].name)}${done ? ', done' : ''}">
+    cells += `<a class="${cls}" href="#/day/${k}" aria-label="${esc(prettyDate(k))}${ids.length ? `, ${esc(ids.map(id => PROGRAM[id].name).join(' and '))}` : ''}${done ? ', done' : ''}">
       <span class="dnum">${d.getDate()}</span>
-      ${chip(wid, done ? 'done' : '')}${log && log.also && log.also.length ? `<span class="plus-n">+${log.also.length}</span>` : ''}
+      ${ids.slice(0, 1).map(id => chip(id, workoutLogged(k, id) ? 'done' : '')).join('')}${ids.length > 1 ? `<span class="plus-n">+${ids.length - 1}</span>` : ''}
       ${done ? '<span class="tick">✓</span>' : started ? '<span class="dot"></span>' : ''}
       ${foodGoalsHit(k) ? '<span class="heart" title="Protein + fiber goals hit">💗</span>' : ''}
     </a>`;
@@ -497,9 +514,7 @@ function renderCalendar() {
         <div class="eyebrow">${esc(prettyDate(tk))}${state.daily[tk] && state.daily[tk].time ? ` · ${esc(timeLabel(state.daily[tk].time))}` : ''}</div>
         <h1 class="affirmation">${esc(affirmationFor(tk))}</h1>
       </div>
-      ${todayW === 'REST'
-        ? `<a class="btn ghost" href="#/day/${tk}">Log steps</a>`
-        : `<a class="btn primary bloom" href="#/log/${tk}">${FLOWER}${todayLog && todayLog.done ? 'View workout' : logHasData(todayLog) ? 'Continue' : 'Start workout'}</a>`}
+      <a class="btn primary bloom" href="#/day/${tk}">${FLOWER}${logHasData(todayLog) ? 'Today\'s workout' : 'Log a workout'}</a>
     </section>
 
     <section class="card">
@@ -513,7 +528,7 @@ function renderCalendar() {
         ${cells}
       </div>
       <div class="legend">
-        <span>${chip('A')} Heavy legs</span><span>${chip('B')} High-rep arms</span><span>${chip('E')} Glute pump</span><span>${chip('CARDIO')} Cardio</span><span>${chip('PILATES')} Pilates</span>
+        <span>${chip('A')} Heavy legs</span><span>${chip('B')} High-rep arms</span><span>${chip('E')} Glute pump</span><span>${chip('CARDIO')} Cardio, HIIT & spin</span><span>${chip('PILATES')} Pilates & yoga</span>
       </div>
       <div class="row-btns">
         <button class="btn ghost sm" data-act="today-month">Today</button>
@@ -532,7 +547,7 @@ function renderCalendar() {
         <div class="meter cardio"><i style="width:${cardioPct * 100}%"></i></div>
       </div>
       <div class="week-strip">
-        ${ws.days.map((d, i) => `<a href="#/day/${d.k}" class="ws ${d.done ? 'done' : ''} ${d.k === tk ? 'today' : ''}"><span>${DOW[i][0]}</span>${d.done ? '✓' : PROGRAM[d.wid].short[0]}</a>`).join('')}
+        ${ws.days.map((d, i) => `<a href="#/day/${d.k}" class="ws ${d.done ? 'done' : ''} ${d.k === tk ? 'today' : ''}"><span>${DOW[i][0]}</span>${d.done ? '✓' : '·'}</a>`).join('')}
       </div>
     </section>
 
@@ -540,64 +555,80 @@ function renderCalendar() {
   `;
 }
 
+let dayChoosing = false;
+let cardioPick = null;     // activity chosen in the Cardio Day logger
+
+// Cardio Day: pick what you did (walk with Huey, jog, StairMaster…), minutes and optional miles. Log as many as you like.
+function cardioCard(k, g) {
+  const log = state.logs[k];
+  const done = g.exs.filter(ex => ex.type === 'cardio' && entryHasData(log && log.entries[ex.id]));
+  if (!cardioPick) cardioPick = CARDIO_CHOICES[0];
+  return `<section class="card k-cardio accent day-workout cardio-day">
+    <div class="dw-head">
+      <h2>Cardio Day</h2>
+      <span class="${done.length ? 'logged-tag' : 'pending-tag'}">${done.length ? '✓ Logged' : 'Not logged yet'}</span>
+    </div>
+    ${done.length ? `<ul class="cardio-done">${done.map(ex => `
+      <li><b>${esc(ex.name)}</b><span class="muted">${esc(setsText(ex, log.entries[ex.id]))}</span>
+        <button class="x" data-act="cardio-del" data-id="${ex.id}" data-k="${k}" aria-label="Remove ${esc(ex.name)}">✕</button></li>`).join('')}</ul>` : ''}
+    <div class="cardio-logger">
+      <div class="activity-chips" role="radiogroup" aria-label="What did you do?">
+        ${CARDIO_CHOICES.map(id => exDef(id)).filter(Boolean).map(ex => `<button type="button" class="mchip ${ex.id === cardioPick ? 'on' : ''}" data-act="cardio-pick" data-id="${ex.id}" role="radio" aria-checked="${ex.id === cardioPick}">${ex.id === 'huey-walk' ? '🐾 ' : ''}${esc(ex.name)}</button>`).join('')}
+      </div>
+      <div class="cardio-inputs">
+        <label class="field"><span>Minutes</span><input type="number" inputmode="decimal" min="1" step="1" data-cardio="min" placeholder="${exDef(cardioPick).goalMin || 30}"></label>
+        <label class="field"><span>Miles (optional)</span><input type="number" inputmode="decimal" min="0" step="0.1" data-cardio="miles" placeholder="—"></label>
+        <button class="btn primary" data-act="cardio-add" data-k="${k}">${done.length ? 'Add' : 'Log it'}</button>
+      </div>
+    </div>
+    <div class="row-btns left"><button class="btn link-danger" data-act="day-remove" data-w="CARDIO" data-k="${k}">Remove</button></div>
+  </section>`;
+}   // showing the workout picker on a day that already has a workout
+
 function renderDay(k) {
-  const wid = workoutFor(k);
-  const w = PROGRAM[wid];
   const log = state.logs[k];
   const daily = state.daily[k] || {};
   const prevK = key(addDays(parseKey(k), -1));
   const nextK = key(addDays(parseKey(k), 1));
   const past = k < todayKey();
   const groups = logExerciseGroups(k);
+  const chosen = dayWorkouts(k);
 
   const exItem = ex => {
-    const prev = lastSession(ex.id, k);
-    const sg = suggest(ex, prev);
     const entry = log && log.entries && log.entries[ex.id];
-    let target;
-    if (timed(ex)) target = `${fmtW(sg.cardio.min)} min`;
-    else if (sg.w) target = `${fmtW(sg.w)} ${u()} · ${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}`;
-    else target = `${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? 's' : ''}`;
     return `<li>
       <div><b>${esc(ex.name)}</b><span class="tag t-${ex.type}">${TYPE_LABEL[ex.type]}</span></div>
-      <div class="muted">${entryHasData(entry) ? `Logged: ${esc(setsText(ex, entry))}` : `Target: ${esc(target)}${prev ? ` · last ${esc(setsText(ex, prev.entry))}` : ''}`}</div>
+      <div class="muted">${entryHasData(entry) ? esc(setsText(ex, entry)) : 'Not logged'}</div>
     </li>`;
   };
-  const groupLogged = g => g.exs.some(ex => entryHasData(log && log.entries[ex.id]));
-  // Classes and cardio days can be checked off in one tap.
-  const quickBtn = g => g.exs.length && g.exs.every(timed) && !groupLogged(g)
-    ? `<button class="btn ghost block" data-act="quick-done" data-w="${g.id}" data-k="${k}">✓ It happened</button>` : '';
 
-  const cards = groups.map((g, gi) => {
+  const cards = groups.filter(g => PROGRAM[g.id]).map(g => {
     const p = PROGRAM[g.id];
-    if (gi === 0) {
-      return `<section class="card k-${w.kind} accent">
-        <div class="card-head">
-          <h2>${esc(w.name)}${groupLogged(g) ? ' <span class="logged-tag">✓ Logged</span>' : ''}</h2>
-          <label class="swap">Swap
-            <select data-act="override" data-k="${k}">
-              ${Object.values(PROGRAM).map(x => `<option value="${x.id}" ${x.id === wid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
-            </select>
-          </label>
-        </div>
-        <p class="muted">${esc(w.blurb)}</p>
-        <ul class="ex-list">${g.exs.map(exItem).join('')}</ul>
-        ${quickBtn(g)}
-      </section>`;
-    }
-    return `<section class="card ${p ? `k-${p.kind} accent` : ''}">
-      <div class="card-head">
-        <h2>${esc(g.title)}${groupLogged(g) ? ' <span class="logged-tag">✓ Logged</span>' : ''}</h2>
-        ${p ? `<button class="x" data-act="also-del" data-w="${g.id}" data-k="${k}" aria-label="Remove ${esc(g.title)}">✕</button>` : ''}
+    if (g.id === 'CARDIO') return cardioCard(k, g);
+    const logged = workoutLogged(k, g.id);
+    const loggedExs = g.exs.filter(ex => entryHasData(log && log.entries[ex.id]));
+    return `<section class="card k-${p.kind} accent day-workout">
+      <div class="dw-head">
+        <h2>${esc(p.name)}</h2>
+        <span class="${logged ? 'logged-tag' : 'pending-tag'}">${logged ? '✓ Logged' : 'Not logged yet'}</span>
       </div>
-      <ul class="ex-list">${g.exs.map(exItem).join('')}</ul>
-      ${p ? quickBtn(g) : ''}
+      ${logged ? `<details class="dw-summary"><summary>Summary</summary><ul class="ex-list">${loggedExs.map(exItem).join('')}</ul></details>` : ''}
+      <div class="row-btns left">
+        <a class="btn ${logged ? 'ghost' : 'primary'} sm" href="#/log/${k}">${logged ? 'Edit' : past ? 'Log it' : 'Start'}</a>
+        <button class="btn link-danger" data-act="day-remove" data-w="${g.id}" data-k="${k}">Remove</button>
+      </div>
     </section>`;
   }).join('');
 
-  const allLogged = groups.length && groups.every(groupLogged);
-  const label = log && log.done && allLogged ? 'Edit workout' : logHasData(log) ? 'Log the rest' : past ? 'Log workout' : 'Start workout';
-  const addable = Object.values(PROGRAM).filter(p => p.id !== 'REST' && !dayWorkouts(k).includes(p.id));
+  const choices = Object.values(PROGRAM).filter(p => p.id !== 'REST' && !chosen.includes(p.id));
+  const picker = `<section class="card pick-card">
+    <div class="card-head"><h2>${chosen.length ? 'Add workout' : past ? 'What did you do?' : 'What are you doing today?'}</h2>
+      ${chosen.length ? '<button class="btn ghost sm" data-act="day-cancel">Cancel</button>' : ''}</div>
+    <div class="pick-grid">
+      ${choices.map(p => `<button class="pick k-${p.kind}" data-act="pick-workout" data-w="${p.id}" data-k="${k}">
+        <b>${esc(p.name)}</b><small>${esc(p.blurb)}</small></button>`).join('')}
+    </div>
+  </section>`;
 
   app.innerHTML = `
     <div class="nav-row">
@@ -606,35 +637,12 @@ function renderDay(k) {
       <a class="icon-btn" href="#/day/${nextK}" aria-label="Next day">›</a>
     </div>
 
-    ${groups.length ? cards : `<section class="card k-${w.kind} accent">
-      <div class="card-head">
-        <h2>${esc(w.name)}</h2>
-        <label class="swap">Swap
-          <select data-act="override" data-k="${k}">
-            ${Object.values(PROGRAM).map(x => `<option value="${x.id}" ${x.id === wid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <p class="muted">${esc(w.blurb)}</p>
-    </section>`}
-
-    ${groups.length ? `<a class="btn primary block bloom day-log-btn" href="#/log/${k}">${FLOWER}${label}</a>` : ''}
-
-    <section class="card add-workout">
-      <h3>Add another workout</h3>
-      <p class="muted">Did more than one today, like Pilates and a glute session? Add it and it counts too.</p>
-      <div class="add-ex-row">
-        <select data-act="pick-also" aria-label="Workout">
-          ${addable.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
-        </select>
-        <button class="btn primary sm" data-act="also-add" data-k="${k}">Add</button>
-      </div>
-    </section>
+    ${cards}
+    ${!chosen.length || dayChoosing ? picker : `<button class="btn ghost block add-workout-btn" data-act="day-add">+ Add workout</button>`}
 
     <section class="card">
       <h2>Daily check-in</h2>
-      <div class="grid3 checkin">
-        <label class="field"><span>Workout time</span><input type="time" data-daily="time" data-k="${k}" value="${esc(daily.time || '')}"></label>
+      <div class="grid2 checkin">
         <label class="field"><span>Steps</span><input type="number" inputmode="numeric" min="0" data-daily="steps" data-k="${k}" value="${esc(daily.steps || '')}" placeholder="${GOALS.stepsPerDay}"></label>
         <label class="field"><span>Body weight (${u()})</span><input type="number" inputmode="decimal" min="0" step="0.1" data-daily="bw" data-k="${k}" value="${esc(daily.bw || '')}" placeholder="optional"></label>
       </div>
@@ -649,13 +657,15 @@ function renderDay(k) {
   app.dataset.k = k;
 }
 
-function ensureLog(k) {
-  if (!state.logs[k]) state.logs[k] = { w: workoutFor(k), entries: {}, notes: '', done: false };
+function ensureLog(k, wid) {
+  if (!state.logs[k]) state.logs[k] = { w: wid || null, entries: {}, notes: '', done: false };
+  else if (!state.logs[k].w && wid) state.logs[k].w = wid;
   return state.logs[k];
 }
 
 function renderLog(k) {
-  const wid = workoutFor(k);
+  const wid = dayWorkouts(k)[0];
+  if (!wid) { location.hash = `#/day/${k}`; return; }
   const w = PROGRAM[wid];
   const log = state.logs[k];
   const exs = logExercises(k);
@@ -708,7 +718,7 @@ function renderLog(k) {
           <label class="field"><span>Speed mph</span><input type="number" inputmode="decimal" min="0" step="0.1" data-c="speed" value="${esc(c.speed || '')}" placeholder="${fmtW(sg.cardio.speed)}"></label>`}
         </div>
         <div class="ex-foot">
-          <button class="btn ghost sm" data-act="fill-cardio">Use target</button>
+          <div class="row-btns left"><button class="btn ghost sm" data-act="fill-cardio">Use target</button><button class="btn ghost sm" data-act="ex-skip">Skip</button></div>
           <button class="btn primary sm done-ex" data-act="ex-done">Done</button>
         </div>
       </section>`;
@@ -742,6 +752,7 @@ function renderLog(k) {
         <div class="row-btns left">
           <button class="btn ghost sm" data-act="add-set">+ Set</button>
           ${sets.length > 1 ? '<button class="btn ghost sm" data-act="del-set">− Set</button>' : ''}
+          <button class="btn ghost sm" data-act="ex-skip">Skip</button>
         </div>
         <button class="btn primary sm done-ex" data-act="ex-done">Done</button>
       </div>
@@ -792,7 +803,6 @@ function renderLog(k) {
 
 function readLogFromDom(k) {
   const log = ensureLog(k);
-  log.w = workoutFor(k);
   app.querySelectorAll('.card.ex:not(.collapsed)').forEach(card => {
     const exId = card.dataset.ex;
     const ex = exDef(exId);
@@ -993,13 +1003,6 @@ function renderProgram() {
         <li><b>Cut.</b> About ${fmt(GOALS.calories)} cal and ${GOALS.protein} g protein. Aim to lose 0.5–1 lb a week while keeping strength.</li>
       </ul>
     </section>
-    <section class="card">
-      <h2>Weekly schedule</h2>
-      <div class="sched">
-        ${DOW.map((d, i) => `<label class="sched-row"><span>${d}</span>
-          <select data-act="schedule" data-i="${i}">${Object.values(PROGRAM).map(p => `<option value="${p.id}" ${state.schedule[i] === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`).join('')}
-      </div>
-    </section>
     ${Object.values(PROGRAM).filter(w => w.ex.length).map(w => `
       <section class="card k-${w.kind} accent">
         <h2>${esc(w.name)}</h2>
@@ -1154,6 +1157,89 @@ app.addEventListener('click', e => {
   }
   if (act === 'finish') finishWorkout(t.dataset.k);
 
+  if (act === 'cardio-pick') {
+    cardioPick = t.dataset.id;
+    app.querySelectorAll('.activity-chips .mchip').forEach(b => { const on = b === t; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    const m = app.querySelector('[data-cardio="min"]');
+    if (m) { m.placeholder = exDef(cardioPick).goalMin || 30; m.focus(); }
+  }
+  if (act === 'cardio-add') {
+    const day = t.dataset.k;
+    const min = num(app.querySelector('[data-cardio="min"]').value);
+    const miles = num(app.querySelector('[data-cardio="miles"]').value);
+    if (!(min > 0)) { toast('Add the minutes'); app.querySelector('[data-cardio="min"]').focus(); return; }
+    const log = ensureLog(day, 'CARDIO');
+    if (log.w !== 'CARDIO' && !(log.also || []).includes('CARDIO')) log.also = [...(log.also || []), 'CARDIO'];
+    const prev = log.entries[cardioPick] && log.entries[cardioPick].cardio;
+    // Logging the same thing twice in a day adds the minutes and miles together.
+    log.entries[cardioPick] = { cardio: { ...(prev || {}), min: String(num(prev && prev.min) + min), ...(miles || num(prev && prev.miles) ? { miles: String(r1(num(prev && prev.miles) + miles)) } : {}) }, done: true };
+    if (!PROGRAM.CARDIO.ex.some(x => x.id === cardioPick) && !(log.extra || []).includes(cardioPick)) log.extra = [...(log.extra || []), cardioPick];
+    log.done = true;
+    log.finishedAt = new Date().toISOString();
+    save();
+    toast(`${exDef(cardioPick).name}: ${fmtW(min)} min ✓`);
+    renderDay(day);
+  }
+  if (act === 'cardio-del') {
+    const day = t.dataset.k;
+    const log = state.logs[day];
+    if (!log || !confirm(`Remove ${exDef(t.dataset.id).name} from ${prettyDate(day)}?`)) return;
+    delete log.entries[t.dataset.id];
+    log.extra = (log.extra || []).filter(x => x !== t.dataset.id);
+    save(); renderDay(day);
+  }
+  if (act === 'day-add') { dayChoosing = true; renderDay(app.dataset.k); const pc = app.querySelector('.pick-card'); if (pc) pc.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  if (act === 'day-cancel') { dayChoosing = false; renderDay(app.dataset.k); }
+  if (act === 'pick-workout') {
+    const day = t.dataset.k;
+    const wid = t.dataset.w;
+    const p = PROGRAM[wid];
+    const log = ensureLog(day, wid);
+    if (log.w !== wid && !(log.also || []).includes(wid)) log.also = [...(log.also || []), wid];
+    dayChoosing = false;
+    if (p.ex.length && p.ex.every(ex => ex.type === 'class')) {
+      // A class is logged in one tap; open it to change the minutes.
+      const ex = p.ex[0];
+      if (!entryHasData(log.entries[ex.id])) log.entries[ex.id] = { cardio: { min: String(ex.goalMin || 45) }, done: true };
+      log.done = true;
+      log.finishedAt = new Date().toISOString();
+      save(); confetti(); toast(`${p.name} logged ✓ (${ex.goalMin || 45} min)`);
+      renderDay(day);
+      return;
+    }
+    if (wid === 'CARDIO') {
+      save(); renderDay(day);
+      const c = app.querySelector('.cardio-day');
+      if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    save();
+    location.hash = `#/log/${day}`;
+    setTimeout(() => {
+      const first = p.ex[0];
+      const card = first && app.querySelector(`.card.ex[data-ex="${first.id}"]`);
+      if (card && log.w !== wid) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }
+  if (act === 'day-remove') {
+    const day = t.dataset.k;
+    const log = state.logs[day];
+    if (!log) return;
+    const wid = t.dataset.w;
+    const p = PROGRAM[wid];
+    const groups = logExerciseGroups(day);
+    const mine = (groups.find(g => g.id === wid) || { exs: [] }).exs;
+    const hasData = mine.some(ex => entryHasData(log.entries[ex.id]));
+    if (!confirm(`Are you sure you want to remove ${p.name} from ${prettyDate(day)}?${hasData ? ' What you logged for it will be deleted.' : ''}`)) return;
+    mine.forEach(ex => { delete log.entries[ex.id]; });
+    if (log.w === wid) {
+      log.extra = [];
+      const rest = (log.also || []).filter(id => id !== wid);
+      if (rest.length) { log.w = rest[0]; log.also = rest.slice(1); } else delete state.logs[day];
+    } else log.also = (log.also || []).filter(id => id !== wid);
+    save(); renderDay(day);
+  }
+
   if (act === 'also-add') {
     const sel = app.querySelector('[data-act="pick-also"]');
     const day = t.dataset.k;
@@ -1206,10 +1292,16 @@ app.addEventListener('click', e => {
     else { inp.disabled = false; inp.value = inp.dataset.prev || ''; inp.placeholder = u(); inp.focus(); }
     readLogFromDom(k); save();
   }
-  if (act === 'ex-done') {
+  if (act === 'ex-done' || act === 'ex-skip') {
     const card = t.closest('.card.ex');
     const exId = card.dataset.ex;
     const log = readLogFromDom(k);
+    if (act === 'ex-skip') {
+      // Didn't do it: clear what was typed so it doesn't count.
+      const entry = log.entries[exId];
+      if (entry.cardio) entry.cardio = {};
+      if (entry.sets) entry.sets = entry.sets.map(x => ({ ...x, r: '' }));
+    }
     log.entries[exId].done = true;
     save();
     renderLog(k);
