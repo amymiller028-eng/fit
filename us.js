@@ -6,13 +6,15 @@ const WHO = [
   { id: 'Both', label: 'Both of us' },
   { id: 'Amy', label: 'Amy' },
   { id: 'Cory', label: 'Cory' },
-  { id: 'Huey', label: 'Huey' },
 ];
+// Older events saved for Huey show as both of you.
+const whoOf = e => (WHO.some(w => w.id === e.who) ? e.who : 'Both');
 
 // What kind of plan it is, for the insights at the top.
 const US_CATS = [
   { id: 'date', label: 'Date night' },
-  { id: 'family', label: 'Family' },
+  { id: 'family', label: 'Family day' },
+  { id: 'bigfamily', label: 'Big family day' },
   { id: 'friends', label: 'Friends' },
   { id: 'wedding', label: 'Wedding' },
   { id: 'appt', label: 'Appointment' },
@@ -29,7 +31,8 @@ const CAT_WORDS = [
   ['appt', /\b(doctor|dr\.?|dentist|dental|appt|appointment|checkup|physical|therapy|therapist|derm|dermatologist|eye|optometrist|haircut|hair|nails|lashes|brows|massage|oil change|car service|dmv|bank)\b/i],
   ['travel', /\b(trip|flight|fly|vacation|hotel|travel|airport|beach|cruise|road trip|getaway|airbnb)\b/i],
   ['work', /\b(work|meeting|conference|shift|presentation|interview|deadline|office)\b/i],
-  ['family', /\b(mom|dad|mother|father|parents|family|grandma|grandpa|nana|papa|sister|brother|sis|bro|aunt|uncle|cousin|in-laws|niece|nephew|thanksgiving|christmas|easter|samuels)\b/i],
+  ['bigfamily', /\b(grandma|grandpa|nana|papa|aunt|uncle|cousins?|in-laws|niece|nephew|reunion|thanksgiving|christmas|easter|big family|extended family)\b/i],
+  ['family', /\b(mom|dad|mother|father|parents|family|sister|brother|sis|bro|samuels)\b/i],
   ['date', /\b(date|date night|anniversary|dinner for two|just us|romantic|movie|movies|sushi|steakhouse)\b/i],
   ['friends', /\b(friends?|party|game night|brunch|girls|guys|drinks|happy hour|bbq|cookout|bday|birthday|hang|hangout|tailgate|concert|trivia)\b/i],
 ];
@@ -80,7 +83,7 @@ function renderUs(arg) {
     const evs = eventsOn(k);
     cells += `<button class="ucell ${d.getMonth() !== first.getMonth() ? 'out' : ''} ${k === today ? 'today' : ''} ${k === usDay ? 'sel' : ''}" data-act="us-day" data-k="${k}" aria-label="${esc(prettyDate(k))}${evs.length ? `, ${evs.length} event${evs.length > 1 ? 's' : ''}` : ''}">
       <span class="dnum">${d.getDate()}</span>
-      ${evs.slice(0, 2).map(e => `<span class="ev who-${e.who}">${esc(e.title)}</span>`).join('')}
+      ${evs.slice(0, 2).map(e => `<span class="ev who-${whoOf(e)}">${esc(e.title)}</span>`).join('')}
       ${evs.length > 2 ? `<span class="ev-more">+${evs.length - 2}</span>` : ''}
     </button>`;
   }
@@ -111,10 +114,10 @@ function renderUs(arg) {
       ${usEditing === 'new' ? eventForm(null) : ''}
       ${dayEvs.length ? `<ul class="us-list">${dayEvs.map(e => usEditing === e.id ? `<li class="editing">${eventForm(e)}</li>` : `
         <li>
-          <span class="dot-who who-${e.who}" aria-hidden="true"></span>
+          <span class="dot-who who-${whoOf(e)}" aria-hidden="true"></span>
           <div class="ul-main">
             <b>${esc(e.title)}</b>
-            <small class="muted">${esc(catLabel(catOf(e)))} · ${e.time ? esc(timeLabel(e.time)) + ' · ' : ''}${esc(WHO.find(w => w.id === e.who)?.label || e.who)}${e.note ? ' · ' + esc(e.note) : ''}</small>
+            <small class="muted">${esc(catLabel(catOf(e)))} · ${e.time ? esc(timeLabel(e.time)) + ' · ' : ''}${esc(WHO.find(w => w.id === whoOf(e)).label)}${e.note ? ' · ' + esc(e.note) : ''}</small>
           </div>
           <button class="btn ghost sm" data-act="us-edit" data-id="${e.id}">Edit</button>
         </li>`).join('')}</ul>` : usEditing === 'new' ? '' : '<p class="muted">Nothing planned. Tap <b>+ Add event</b>.</p>'}
@@ -124,7 +127,7 @@ function renderUs(arg) {
       <h2>Coming up</h2>
       <ul class="us-list upcoming">${upcoming.map(e => `
         <li data-act="us-day" data-k="${e.date}">
-          <span class="dot-who who-${e.who}" aria-hidden="true"></span>
+          <span class="dot-who who-${whoOf(e)}" aria-hidden="true"></span>
           <div class="ul-main"><b>${esc(e.title)}</b><small class="muted">${esc(shortDate(e.date))}${e.time ? ' · ' + esc(timeLabel(e.time)) : ''}</small></div>
         </li>`).join('')}</ul>
     </section>` : ''}
@@ -236,7 +239,7 @@ function eventForm(e) {
       </div>
     </div>
     <div class="who-chips" role="radiogroup" aria-label="Who">
-      ${WHO.map(w => `<label class="who-chip who-${w.id}"><input type="radio" name="who" value="${w.id}" ${x.who === w.id ? 'checked' : ''}><span>${esc(w.label)}</span></label>`).join('')}
+      ${WHO.map(w => `<label class="who-chip who-${w.id}"><input type="radio" name="who" value="${w.id}" ${whoOf(x) === w.id ? 'checked' : ''}><span>${esc(w.label)}</span></label>`).join('')}
     </div>
     <label class="field"><span>Note (optional)</span><input name="note" maxlength="120" value="${esc(x.note || '')}" placeholder="Address, what to bring…"></label>
     <div class="row-btns left">
