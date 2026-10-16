@@ -120,6 +120,57 @@ const PROGRAM = {
   },
 };
 
+// Common lifts you can add to any workout (machine taken, swapping something in, extra work).
+// Same fields as the program exercises, so they get the same suggestions and history.
+const EXTRA_GROUPS = [
+  { label: 'Glutes & legs', ex: [
+    { id: 'adductor', name: 'Adductor machine', type: 'volume', sets: 3, reps: [15, 20], inc: 10, start: '60–90 lb.' },
+    { id: 'cable-abduction', name: 'Cable hip abduction', type: 'volume', sets: 3, reps: [12, 15], inc: 2.5, each: true, start: '5–15 lb on the stack.' },
+    { id: 'band-abduction', name: 'Banded hip abduction', type: 'bw', sets: 3, reps: [20, 30] },
+    { id: 'glute-bridge', name: 'Barbell glute bridge', type: 'heavy', sets: 3, reps: [8, 12], inc: 10, start: '45–95 lb.' },
+    { id: 'hip-thrust-machine', name: 'Hip thrust machine', type: 'heavy', sets: 4, reps: [8, 12], inc: 10, start: '50–90 lb.' },
+    { id: 'leg-press', name: 'Leg press', type: 'heavy', sets: 4, reps: [8, 12], inc: 20, start: '90–140 lb on the sled.' },
+    { id: 'smith-squat', name: 'Smith machine squat', type: 'heavy', sets: 4, reps: [6, 10], inc: 10, start: 'Empty bar, or 10s on each side.' },
+    { id: 'goblet-squat', name: 'Goblet squat', type: 'heavy', sets: 3, reps: [8, 12], inc: 5, start: '20–30 lb dumbbell.' },
+    { id: 'sumo-deadlift', name: 'Sumo deadlift', type: 'heavy', sets: 4, reps: [5, 8], inc: 10, start: '65–95 lb.' },
+    { id: 'single-leg-rdl', name: 'Single-leg RDL', type: 'volume', sets: 3, reps: [8, 10], inc: 5, each: true, start: '15–25 lb dumbbell.' },
+    { id: 'reverse-lunge', name: 'Reverse lunge', type: 'heavy', sets: 3, reps: [8, 12], inc: 5, each: true, start: '15–20 lb dumbbells.' },
+    { id: 'curtsy-lunge', name: 'Curtsy lunge', type: 'volume', sets: 3, reps: [10, 12], inc: 5, each: true, start: 'Bodyweight, then 10–15 lb dumbbells.' },
+    { id: 'hamstring-curl', name: 'Hamstring curl', type: 'volume', sets: 3, reps: [10, 12], inc: 5, start: '40–60 lb.' },
+    { id: 'leg-extension', name: 'Leg extension', type: 'volume', sets: 3, reps: [12, 15], inc: 5, start: '40–60 lb.' },
+    { id: 'calf-raise', name: 'Calf raise', type: 'volume', sets: 3, reps: [15, 20], inc: 10, start: 'Bodyweight, then hold dumbbells.' },
+  ] },
+  { label: 'Back, chest & shoulders', ex: [
+    { id: 'cable-row', name: 'Cable row', type: 'volume', sets: 3, reps: [10, 12], inc: 5, start: '50–70 lb.' },
+    { id: 'chest-press', name: 'Chest press machine', type: 'volume', sets: 3, reps: [10, 12], inc: 5, start: '30–50 lb.' },
+    { id: 'push-up', name: 'Push-ups', type: 'bw', sets: 3, reps: [8, 15] },
+    { id: 'arnold-press', name: 'Arnold press', type: 'volume', sets: 3, reps: [10, 12], inc: 2.5, start: '10–15 lb dumbbells.' },
+    { id: 'rear-delt-fly', name: 'Rear delt fly', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, start: '5–8 lb dumbbells.' },
+    { id: 'front-raise', name: 'Front raise', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, start: '5–8 lb dumbbells.' },
+  ] },
+  { label: 'Arms', ex: [
+    { id: 'cable-curl', name: 'Cable curl', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, start: '15–25 lb.' },
+    { id: 'preacher-curl', name: 'Preacher curl', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, start: '15–25 lb.' },
+    { id: 'skull-crusher', name: 'Skull crushers', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, start: '10–15 lb dumbbells.' },
+    { id: 'tricep-kickback', name: 'Triceps kickback', type: 'arms', sets: 3, reps: [15, 20], inc: 2.5, each: true, start: '5–10 lb dumbbell.' },
+    { id: 'bench-dip', name: 'Bench dips', type: 'bw', sets: 3, reps: [12, 20] },
+  ] },
+  { label: 'Core', ex: [
+    { id: 'cable-crunch', name: 'Cable crunch', type: 'volume', sets: 3, reps: [12, 15], inc: 5, start: '30–50 lb.' },
+    { id: 'russian-twist', name: 'Russian twists', type: 'bw', sets: 3, reps: [20, 30] },
+    { id: 'bicycle-crunch', name: 'Bicycle crunches', type: 'bw', sets: 3, reps: [20, 30] },
+    { id: 'side-plank', name: 'Side plank', type: 'time', sets: 3, reps: [30, 45], each: true },
+  ] },
+  { label: 'Cardio', ex: [
+    { id: 'stairmaster', name: 'StairMaster', type: 'cardio', goalMin: 20 },
+    { id: 'bike', name: 'Bike', type: 'cardio', goalMin: 20 },
+    { id: 'elliptical', name: 'Elliptical', type: 'cardio', goalMin: 20 },
+    { id: 'run', name: 'Run', type: 'cardio', goalMin: 20 },
+    { id: 'row-machine', name: 'Rowing machine', type: 'cardio', goalMin: 15 },
+    { id: 'outdoor-walk', name: 'Outdoor walk', type: 'cardio', goalMin: 30 },
+  ] },
+];
+
 // Monday-first weekly schedule (index 0 = Monday).
 const DEFAULT_SCHEDULE = ['A', 'B', 'C', 'D', 'E', 'CARDIO', 'REST'];
 
@@ -128,6 +179,7 @@ const GOALS = {
   cardioMinPerWeek: 150,
   calories: 1575,
   protein: 148,
+  fiber: 28,
 };
 
 const TYPE_LABEL = {

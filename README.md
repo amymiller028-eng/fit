@@ -1,27 +1,23 @@
-# 🍑 Glute + Cut Tracker
+# 🐾 Huey's House
 
-A personal workout tracker built on my Glute + Cut Plan. It's a calendar: tap a day, tap the workout, and log your weight and reps.
+Amy, Cory and Huey's home base: one website for the grocery list, nutrition, workouts, money and a wishlist.
 
-## What it does
+## Sections
 
-- **Calendar view.** Every day shows its planned workout. Days you finish get a check mark.
-- **Smart suggestions.** Each exercise shows what you did last time and what to try today:
-  - **Legs: heavier.** 5–8 reps. Hit the top of the range on every set and the app adds weight.
-  - **Arms: high reps.** 15–20 reps. Add a rep each session. Weight goes up only after 20s on every set.
-  - **Cardio: more of it.** A 20-min incline walk after every lift plus a long cardio day. It builds minutes first, then incline, then speed.
-  - Each exercise also shows an **8-week goal** and a starting weight for your first session.
-- **Weekly celebration.** When you open the app after a week ends, you get confetti and a summary: workouts, cardio minutes, leg volume, arm reps, steps and PRs.
-- **Monthly wrap-up.** At the end of each month you see your strength gains per lift and your best week.
-- **Daily check-in.** Log steps and body weight.
+- **Store needs**: a shared grocery list. Cross items off as you shop, tap **Finish trip** to archive them, and see what you buy most in **History & trends**.
+- **Nutrition**: type what you ate ("1/2 cup baked sweet potato") and get calories, protein and fiber from the built-in USDA food database. It tracks daily protein and fiber goals, includes dairy-free plan meals, and flags foods with dairy.
+- **Workout calendar**: daily affirmation, a calendar of the program, logging with suggested weights and reps, per-set bodyweight, added exercises, weekly celebrations and monthly wrap-ups.
+- **Money** (password protected):
+  - **Spend**: log purchases like "4.50 latte" with the card used. Shows day, week and month totals, card spending goals, and a calendar with no-spend days.
+  - **Debt goals**: a shrinking bar for each debt, a debt-free date, a monthly game plan, an emergency cushion, scheduled payments, and pay-in-full cards.
+- **Wishlist**: things to earn with workouts.
 
 ## Your data
 
-Logs are saved in your browser's local storage on that device. Nothing is sent anywhere. To move to a new phone or keep a backup, use **Program → Data → Export backup**, then **Import backup** on the new device.
+Everything is saved in your browser on that device; nothing is sent anywhere. Money data is encrypted with your password (AES-GCM), and if you forget the password it can't be recovered. To move to a new phone, use **Program → Data → Export backup**, then **Import backup**. Money data stays encrypted in the backup.
 
 ## Running it
 
-It's a static site with no build step. Open `index.html`, or serve the folder with any static server. It's hosted on GitHub Pages.
+It's a static site with no build step, hosted on GitHub Pages. Serve the folder with any static server to run it locally.
 
-## Changing the program
-
-All exercises, sets, rep ranges and weight steps live in [`program.js`](program.js). The weekly schedule can also be changed in the app under **Program**.
+Food data: USDA FoodData Central, SR Legacy (public domain), bundled as `usda-foods.json`.
