@@ -50,7 +50,21 @@ let usEditing = null;        // event id being edited, or 'new'
 const usEvents = () => state.events || (state.events = []);
 const eventsOn = k => usEvents().filter(e => e.date === k).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
 
+function usTabs(active) {
+  return `<nav class="subtabs us-tabs" aria-label="Amy & Cory">
+    <a href="#/us" class="${active === 'cal' ? 'on' : ''}">Calendar</a>
+    <a href="#/us/insights" class="${active === 'insights' ? 'on' : ''}">Insights</a>
+  </nav>`;
+}
+
 function renderUs(arg) {
+  if (arg === 'insights') {
+    app.innerHTML = `
+      <div class="page-head"><h1 class="page-title">Amy &amp; Cory</h1></div>
+      ${usTabs('insights')}
+      ${usInsights() || '<div class="empty"><p>Add a few plans to the calendar and your insights show up here.</p></div>'}`;
+    return;
+  }
   const today = todayKey();
   if (arg && /^\d{4}-\d{2}-\d{2}$/.test(arg)) usDay = arg;
   if (!usDay) usDay = today;
@@ -76,7 +90,7 @@ function renderUs(arg) {
 
   app.innerHTML = `
     <div class="page-head"><h1 class="page-title">Amy &amp; Cory</h1></div>
-    ${usInsights()}
+    ${usTabs('cal')}
 
     <section class="card">
       <div class="cal-head">
@@ -238,12 +252,12 @@ app.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
   if (!t) return;
   const act = t.dataset.act;
-  if (act === 'us-period') { usPeriod = t.dataset.p; usAnchor = null; keepScroll(() => renderUs()); }
+  if (act === 'us-period') { usPeriod = t.dataset.p; usAnchor = null; keepScroll(() => renderUs('insights')); }
   if (act === 'us-ins-prev' || act === 'us-ins-next') {
     const a = usAnchor || new Date();
     const step = act === 'us-ins-prev' ? -1 : 1;
     usAnchor = usPeriod === 'week' ? addDays(a, 7 * step) : usPeriod === 'year' ? new Date(a.getFullYear() + step, a.getMonth(), 1) : new Date(a.getFullYear(), a.getMonth() + step, 1);
-    keepScroll(() => renderUs());
+    keepScroll(() => renderUs('insights'));
   }
   if (act === 'us-day') { usDay = t.dataset.k; usEditing = null; const d = parseKey(usDay); usMonth = new Date(d.getFullYear(), d.getMonth(), 1); keepScroll(() => renderUs()); }
   if (act === 'us-prev' || act === 'us-next') { usMonth = new Date(usMonth.getFullYear(), usMonth.getMonth() + (act === 'us-prev' ? -1 : 1), 1); keepScroll(() => renderUs()); }

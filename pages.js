@@ -423,6 +423,35 @@ function previewHtml() {
 function paintPreview() {
   const box = document.getElementById('eat-preview');
   if (box) box.innerHTML = previewHtml();
+  const sug = document.getElementById('eat-suggest');
+  if (sug) sug.innerHTML = suggestHtml();
+}
+
+// Library matches as you type: your own foods, the built-in list and the Starbucks menu. Tap + to add one serving.
+function librarySuggestions(text) {
+  const words = parseFood(text).food.toLowerCase().split(/\s+/).filter(w => w.length > 1).map(stem);
+  if (!words.length) return [];
+  const pool = [
+    ...(state.myFoods || []).map((x, i) => ({ x, i, src: 'mine' })),
+    ...FOODS.map((x, i) => ({ x, i, src: 'lib' })),
+  ];
+  const wantsSbux = words.some(w => 'starbucks'.startsWith(w) && w.length >= 3);
+  return pool.map(o => {
+    const name = o.x.name.toLowerCase();
+    const nameWords = name.split(/[^a-z0-9%&]+/).filter(Boolean).map(stem);
+    const hits = words.filter(w => nameWords.some(n => n.startsWith(w)) || name.includes(w));
+    if (hits.length < words.length) return null;
+    const starts = nameWords.indexOf(words.find(w => w !== 'starbuck') || words[0]);
+    return { ...o, sc: (o.src === 'mine' ? 2 : 0) + (wantsSbux && o.x.brand === 'Starbucks' ? 1 : 0) - Math.max(0, starts) * 0.05 - name.length / 1000 };
+  }).filter(Boolean).sort((p, q) => q.sc - p.sc).slice(0, wantsSbux ? 80 : 6);
+}
+
+function suggestHtml() {
+  const text = foodQuery.trim();
+  if (text.length < 2) return '';
+  const hits = librarySuggestions(text);
+  if (!hits.length) return '';
+  return `<p class="muted suggest-label">From your library</p><ul class="food-list suggest-list">${hits.map(o => foodRow(o.x, o.i, o.src)).join('')}</ul>`;
 }
 
 function schedulePreview(now) {
@@ -518,6 +547,7 @@ function renderFood(k) {
         <input type="text" class="eat-input" placeholder="e.g. 1/2 cup baked sweet potato" autocomplete="off" enterkeyhint="done" value="${esc(foodQuery)}" data-act="food-search" aria-label="What did you eat?">
       </div>
       <div id="eat-preview">${previewHtml()}</div>
+      <div id="eat-suggest">${suggestHtml()}</div>
       ${quickPicksHtml()}
       <div class="row-btns left">
         <button class="btn ghost sm" data-act="food-plan" data-k="${k}">Add full plan day</button>
@@ -789,9 +819,10 @@ app.addEventListener('click', e => {
 
   if (act === 'food-meal') { foodMeal = t.dataset.meal; renderFood(k); }
   if (act === 'food-add') {
-    const src = { plan: PLAN_MEALS, mine: state.myFoods || [] }[t.dataset.src];
+    const src = { plan: PLAN_MEALS, mine: state.myFoods || [], lib: FOODS }[t.dataset.src];
     const x = src[Number(t.dataset.i)];
     addFood(k, x, t.dataset.src === 'plan' ? x.meal : foodMeal);
+    if (t.closest('#eat-suggest')) { foodQuery = ''; preview = null; }
     save(); toast(`Added ${shortFood(x.name)}`);
     const y = window.scrollY; renderFood(k); window.scrollTo(0, y);
   }

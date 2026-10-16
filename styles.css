@@ -1010,3 +1010,7 @@ body[data-section="workouts"] .btn.ghost { border-width: 2px; }
 .vb:hover .vb-col i { background: var(--primary-2); }
 .vb-label { font-size: 11px; color: var(--muted); }
 .ins-note { margin-top: 8px; }
+
+/* library matches under the food box */
+.suggest-label { margin: 10px 0 0; font-size: 12px; }
+.suggest-list { max-height: 360px; overflow-y: auto; }
