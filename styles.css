@@ -236,7 +236,6 @@ body[data-section="workouts"] .sidenav [data-tab].on { background: var(--grad); 
   .side-sub a { padding: 6px 12px; border-radius: 99px; font-size: 14px; font-weight: 600; color: var(--muted); }
   .side-sub a:hover { color: var(--primary); }
   .side-sub a.on { background: var(--surface-2); color: var(--primary); }
-  .subtabs { display: none; }
 }
 
 /* today hero */
