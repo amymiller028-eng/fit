@@ -54,12 +54,34 @@ EXTRA_GROUPS.forEach(g => g.ex.forEach(ex => { if (!EX_BY_ID[ex.id]) EX_BY_ID[ex
 // Any exercise by id, including ones you created yourself.
 const exDef = id => EX_BY_ID[id] || (state.customEx && state.customEx[id]) || null;
 
-// The program's exercises for that day plus anything you added to it.
-function logExercises(k) {
-  const base = PROGRAM[workoutFor(k)].ex;
+// The day's workouts: the planned (or swapped) one first, then any you added with "Add another workout".
+function dayWorkouts(k) {
   const log = state.logs[k];
-  const extra = ((log && log.extra) || []).map(exDef).filter(x => x && !base.some(b => b.id === x.id));
-  return [...base, ...extra];
+  return [workoutFor(k), ...((log && log.also) || [])].filter((id, i, a) => PROGRAM[id] && a.indexOf(id) === i);
+}
+
+// Every exercise for the day, tagged with the workout it belongs to. Added workouts skip their incline-walk
+// finisher when the day already has one.
+function logExerciseGroups(k) {
+  const log = state.logs[k];
+  const seen = new Set();
+  const groups = dayWorkouts(k).map((id, gi) => {
+    const exs = PROGRAM[id].ex.filter(ex => !seen.has(ex.id) && !(gi > 0 && ex.id.startsWith('walk-') && [...seen].some(x => x.startsWith('walk-'))));
+    exs.forEach(ex => seen.add(ex.id));
+    return { id, title: PROGRAM[id].name, exs };
+  });
+  const extra = ((log && log.extra) || []).map(exDef).filter(x => x && !seen.has(x.id));
+  if (extra.length) groups.push({ id: 'extra', title: 'Added exercises', exs: extra });
+  return groups.filter(g => g.exs.length);
+}
+
+function logExercises(k) {
+  return logExerciseGroups(k).flatMap(g => g.exs);
+}
+
+// How many workouts a logged day counts for: the main one plus each added workout you actually logged.
+function sessionsOn(log) {
+  return 1 + ((log && log.also) || []).filter(id => PROGRAM[id] && PROGRAM[id].ex.some(ex => entryHasData(log.entries[ex.id]))).length;
 }
 
 // A small flower, used instead of sparkles on the workout pages.
@@ -318,7 +340,7 @@ function summarize(startK, endK) {
     const dayInfo = { k, wid, done: logHasData(log), cardio: 0, volume: 0 };
     s.days.push(dayInfo);
     if (!logHasData(log)) continue;
-    s.done++;
+    s.done += sessionsOn(log);
     Object.entries(log.entries).forEach(([exId, entry]) => {
       const ex = exDef(exId);
       if (!ex || !entryHasData(entry)) return;
@@ -459,7 +481,7 @@ function renderCalendar() {
     const cls = ['cell', d.getMonth() !== viewMonth.getMonth() ? 'out' : '', k === tk ? 'today' : '', k < tk ? 'past' : ''].join(' ');
     cells += `<a class="${cls}" href="#/day/${k}" aria-label="${esc(prettyDate(k))}, ${esc(PROGRAM[wid].name)}${done ? ', done' : ''}">
       <span class="dnum">${d.getDate()}</span>
-      ${chip(wid, done ? 'done' : '')}
+      ${chip(wid, done ? 'done' : '')}${log && log.also && log.also.length ? `<span class="plus-n">+${log.also.length}</span>` : ''}
       ${done ? '<span class="tick">✓</span>' : started ? '<span class="dot"></span>' : ''}
       ${foodGoalsHit(k) ? '<span class="heart" title="Protein + fiber goals hit">💗</span>' : ''}
     </a>`;
@@ -525,40 +547,88 @@ function renderDay(k) {
   const daily = state.daily[k] || {};
   const prevK = key(addDays(parseKey(k), -1));
   const nextK = key(addDays(parseKey(k), 1));
+  const past = k < todayKey();
+  const groups = logExerciseGroups(k);
 
-  const exList = logExercises(k).map(ex => {
+  const exItem = ex => {
     const prev = lastSession(ex.id, k);
     const sg = suggest(ex, prev);
-    const today = log && log.entries && log.entries[ex.id];
+    const entry = log && log.entries && log.entries[ex.id];
     let target;
     if (timed(ex)) target = `${fmtW(sg.cardio.min)} min`;
     else if (sg.w) target = `${fmtW(sg.w)} ${u()} · ${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}`;
     else target = `${ex.sets}×${ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps.join('–')}${ex.type === 'time' ? 's' : ''}`;
     return `<li>
       <div><b>${esc(ex.name)}</b><span class="tag t-${ex.type}">${TYPE_LABEL[ex.type]}</span></div>
-      <div class="muted">${entryHasData(today) ? `Logged: ${esc(setsText(ex, today))}` : `Target: ${esc(target)}${prev ? ` · last ${esc(setsText(ex, prev.entry))}` : ''}`}</div>
+      <div class="muted">${entryHasData(entry) ? `Logged: ${esc(setsText(ex, entry))}` : `Target: ${esc(target)}${prev ? ` · last ${esc(setsText(ex, prev.entry))}` : ''}`}</div>
     </li>`;
+  };
+  const groupLogged = g => g.exs.some(ex => entryHasData(log && log.entries[ex.id]));
+  // Classes and cardio days can be checked off in one tap.
+  const quickBtn = g => g.exs.length && g.exs.every(timed) && !groupLogged(g)
+    ? `<button class="btn ghost block" data-act="quick-done" data-w="${g.id}" data-k="${k}">✓ It happened</button>` : '';
+
+  const cards = groups.map((g, gi) => {
+    const p = PROGRAM[g.id];
+    if (gi === 0) {
+      return `<section class="card k-${w.kind} accent">
+        <div class="card-head">
+          <h2>${esc(w.name)}${groupLogged(g) ? ' <span class="logged-tag">✓ Logged</span>' : ''}</h2>
+          <label class="swap">Swap
+            <select data-act="override" data-k="${k}">
+              ${Object.values(PROGRAM).map(x => `<option value="${x.id}" ${x.id === wid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <p class="muted">${esc(w.blurb)}</p>
+        <ul class="ex-list">${g.exs.map(exItem).join('')}</ul>
+        ${quickBtn(g)}
+      </section>`;
+    }
+    return `<section class="card ${p ? `k-${p.kind} accent` : ''}">
+      <div class="card-head">
+        <h2>${esc(g.title)}${groupLogged(g) ? ' <span class="logged-tag">✓ Logged</span>' : ''}</h2>
+        ${p ? `<button class="x" data-act="also-del" data-w="${g.id}" data-k="${k}" aria-label="Remove ${esc(g.title)}">✕</button>` : ''}
+      </div>
+      <ul class="ex-list">${g.exs.map(exItem).join('')}</ul>
+      ${p ? quickBtn(g) : ''}
+    </section>`;
   }).join('');
+
+  const allLogged = groups.length && groups.every(groupLogged);
+  const label = log && log.done && allLogged ? 'Edit workout' : logHasData(log) ? 'Log the rest' : past ? 'Log workout' : 'Start workout';
+  const addable = Object.values(PROGRAM).filter(p => p.id !== 'REST' && !dayWorkouts(k).includes(p.id));
 
   app.innerHTML = `
     <div class="nav-row">
       <a class="icon-btn" href="#/day/${prevK}" aria-label="Previous day">‹</a>
-      <div class="center"><div class="eyebrow">${k === todayKey() ? 'Today' : k < todayKey() ? 'Past day' : 'Coming up'}</div><h1 class="h-sm">${esc(prettyDate(k))}</h1></div>
+      <div class="center"><div class="eyebrow">${k === todayKey() ? 'Today' : past ? 'Past day' : 'Coming up'}</div><h1 class="h-sm">${esc(prettyDate(k))}</h1></div>
       <a class="icon-btn" href="#/day/${nextK}" aria-label="Next day">›</a>
     </div>
 
-    <section class="card k-${w.kind} accent">
+    ${groups.length ? cards : `<section class="card k-${w.kind} accent">
       <div class="card-head">
         <h2>${esc(w.name)}</h2>
         <label class="swap">Swap
           <select data-act="override" data-k="${k}">
-            ${Object.values(PROGRAM).map(p => `<option value="${p.id}" ${p.id === wid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+            ${Object.values(PROGRAM).map(x => `<option value="${x.id}" ${x.id === wid ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
           </select>
         </label>
       </div>
       <p class="muted">${esc(w.blurb)}</p>
-      ${logExercises(k).length ? `<ul class="ex-list">${exList}</ul>
-        <a class="btn primary block bloom" href="#/log/${k}">${FLOWER}${log && log.done ? 'Edit workout' : logHasData(log) ? 'Continue workout' : 'Start workout'}</a>` : ''}
+    </section>`}
+
+    ${groups.length ? `<a class="btn primary block bloom day-log-btn" href="#/log/${k}">${FLOWER}${label}</a>` : ''}
+
+    <section class="card add-workout">
+      <h3>Add another workout</h3>
+      <p class="muted">Did more than one today, like Pilates and a glute session? Add it and it counts too.</p>
+      <div class="add-ex-row">
+        <select data-act="pick-also" aria-label="Workout">
+          ${addable.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+        </select>
+        <button class="btn primary sm" data-act="also-add" data-k="${k}">Add</button>
+      </div>
     </section>
 
     <section class="card">
@@ -576,6 +646,7 @@ function renderDay(k) {
       <a class="btn ghost sm" href="#/">Calendar</a>
     </div>
   `;
+  app.dataset.k = k;
 }
 
 function ensureLog(k) {
@@ -591,7 +662,16 @@ function renderLog(k) {
   if (!exs.length && wid === 'REST') { location.hash = `#/day/${k}`; return; }
   const added = new Set((log && log.extra) || []);
 
+  const groups = logExerciseGroups(k);
+  const groupStart = {};
+  if (groups.length > 1) groups.forEach(g => { if (g.exs[0]) groupStart[g.exs[0].id] = g.title; });
+
   const cards = exs.map(ex => {
+    const heading = groupStart[ex.id] ? `<h2 class="log-group">${esc(groupStart[ex.id])}</h2>` : '';
+    return heading + exCard(ex);
+  }).join('');
+
+  function exCard(ex) {
     const prev = lastSession(ex.id, k);
     const sg = suggest(ex, prev);
     const entry = log && log.entries[ex.id];
@@ -666,12 +746,12 @@ function renderLog(k) {
         <button class="btn primary sm done-ex" data-act="ex-done">Done</button>
       </div>
     </section>`;
-  }).join('');
+  }
 
   app.innerHTML = `
     <div class="nav-row">
       <a class="icon-btn" href="#/day/${k}" aria-label="Back">‹</a>
-      <div class="center"><div class="eyebrow">${esc(shortDate(k))}</div><h1 class="h-sm">${esc(w.name)}</h1></div>
+      <div class="center"><div class="eyebrow">${esc(shortDate(k))}</div><h1 class="h-sm">${esc(dayWorkouts(k).map(id => PROGRAM[id].name).join(' + '))}</h1></div>
       <span class="icon-btn ghosted"></span>
     </div>
     ${exs.every(timed) ? '' : `<p class="hint">Weights are pre-filled from your last session. Grey numbers are today's rep targets: tap ✓ if you hit it, or type what you did. Did a set with no weight? Tap <b>BW</b> on that set.</p>`}
@@ -1073,6 +1153,46 @@ app.addEventListener('click', e => {
     window.scrollTo(0, y);
   }
   if (act === 'finish') finishWorkout(t.dataset.k);
+
+  if (act === 'also-add') {
+    const sel = app.querySelector('[data-act="pick-also"]');
+    const day = t.dataset.k;
+    if (!sel || !sel.value) return;
+    const log = ensureLog(day);
+    log.also = [...(log.also || []), sel.value];
+    save();
+    location.hash = `#/log/${day}`;
+    setTimeout(() => {
+      const first = PROGRAM[sel.value].ex[0];
+      const card = first && app.querySelector(`.card.ex[data-ex="${first.id}"]`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }
+  if (act === 'also-del') {
+    const day = t.dataset.k;
+    const log = state.logs[day];
+    if (!log) return;
+    const p = PROGRAM[t.dataset.w];
+    const keep = new Set(logExerciseGroups(day).filter(g => g.id !== t.dataset.w).flatMap(g => g.exs.map(ex => ex.id)));
+    const hasData = p.ex.some(ex => !keep.has(ex.id) && entryHasData(log.entries[ex.id]));
+    if (hasData && !confirm(`Remove ${p.name} and what you logged for it?`)) return;
+    log.also = (log.also || []).filter(id => id !== t.dataset.w);
+    p.ex.forEach(ex => { if (!keep.has(ex.id)) delete log.entries[ex.id]; });
+    save(); renderDay(day);
+  }
+  if (act === 'quick-done') {
+    const day = t.dataset.k;
+    const log = ensureLog(day);
+    const p = PROGRAM[t.dataset.w];
+    const ex = p.ex.find(timed);
+    if (ex && !entryHasData(log.entries[ex.id])) log.entries[ex.id] = { cardio: { min: String(ex.goalMin || 30) }, done: true };
+    log.done = true;
+    log.finishedAt = new Date().toISOString();
+    save();
+    confetti();
+    toast(`${p.name} logged ✓`);
+    renderDay(day);
+  }
 
   if (act === 'set-bw') {
     const row = t.closest('.set-row');

@@ -14,6 +14,7 @@ function defaultMeal() {
 
 /* ---------- nutrition ---------- */
 
+let storeEditing = null;  // id of the grocery item being renamed
 let foodMeal = null;
 let foodQuery = '';
 
@@ -589,7 +590,10 @@ function renderStore(view) {
     if (!list.length) return '';
     return `<div class="store-group"><h3>${c.e} ${c.name}</h3><ul class="store-list">${list.map(x => `
       <li class="${x.done ? 'done' : ''}">
-        <label><input type="checkbox" data-act="store-toggle" data-id="${x.id}" ${x.done ? 'checked' : ''}><span class="box"></span><span class="sn">${esc(x.name)}</span></label>
+        <label class="cb"><input type="checkbox" data-act="store-toggle" data-id="${x.id}" ${x.done ? 'checked' : ''} aria-label="Got ${esc(x.name)}"><span class="box"></span></label>
+        ${storeEditing === x.id
+          ? `<input class="sn-edit" data-act="store-rename" data-id="${x.id}" value="${esc(x.name)}" maxlength="60" enterkeyhint="done" aria-label="Edit item">`
+          : `<button class="sn" data-act="store-edit" data-id="${x.id}" aria-label="Edit ${esc(x.name)}">${esc(x.name)}</button>`}
         <button class="x" data-act="store-del" data-id="${x.id}" aria-label="Remove ${esc(x.name)}">✕</button>
       </li>`).join('')}</ul></div>`;
   }).join('');
@@ -785,6 +789,12 @@ app.addEventListener('click', e => {
   }
 
   if (act === 'store-del') { state.store = state.store.filter(x => x.id !== t.dataset.id); save(); renderStore(); }
+  if (act === 'store-edit') {
+    storeEditing = t.dataset.id;
+    const y = window.scrollY; renderStore(); window.scrollTo(0, y);
+    const inp = app.querySelector('.sn-edit');
+    if (inp) { inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
   if (act === 'store-plan') { const n = addStoreItems(PLAN_GROCERIES); save(); toast(n ? `Added ${n} items` : 'Already on the list'); renderStore(); }
   if (act === 'store-fiber') { const n = addStoreItems(FIBER_BOOSTERS); save(); toast(n ? `Added ${n} items` : 'Already on the list'); renderStore(); }
   if (act === 'store-clear-all' && confirm('Clear every item from the list? Your trip history stays.')) {
@@ -821,6 +831,28 @@ app.addEventListener('change', e => {
     x.done = t.checked; save();
     const y = window.scrollY; renderStore(); window.scrollTo(0, y);
   }
+  if (t.dataset.act === 'store-rename') finishStoreEdit(t, true);
+});
+
+// Saving a renamed grocery item: Enter or tapping away saves, Escape cancels. A blank name keeps the old one.
+function finishStoreEdit(inp, keep) {
+  if (storeEditing !== inp.dataset.id) return;
+  const x = (state.store || []).find(i => i.id === inp.dataset.id);
+  const name = inp.value.trim();
+  storeEditing = null;
+  if (keep && x && name && name !== x.name) { x.name = name; save(); }
+  const y = window.scrollY; renderStore(); window.scrollTo(0, y);
+}
+
+app.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.dataset.act !== 'store-rename') return;
+  if (e.key === 'Enter') { e.preventDefault(); finishStoreEdit(t, true); }
+  if (e.key === 'Escape') { e.preventDefault(); finishStoreEdit(t, false); }
+});
+
+app.addEventListener('focusout', e => {
+  if (e.target.dataset && e.target.dataset.act === 'store-rename') finishStoreEdit(e.target, true);
 });
 
 app.addEventListener('input', e => {

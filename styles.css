@@ -879,3 +879,21 @@ body[data-section="workouts"] .btn.ghost { border-width: 2px; }
   :root:not([data-theme="light"]) .heat-3 { background: #6e3350; }
   :root:not([data-theme="light"]) .scell.nospend { background: #1f3a2e; }
 }
+
+/* store items: box crosses off, the name opens an edit field */
+.store-list label.cb { flex: none; padding: 6px 0; }
+.store-list .sn {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 8px 4px; margin: 0;
+  font: inherit; font-size: 15px; color: var(--text); cursor: text; border-radius: 8px; overflow-wrap: anywhere;
+}
+.store-list .sn:hover { background: var(--surface-2); }
+.store-list li.done .sn { text-decoration: line-through; color: var(--muted); }
+.store-list .sn-edit { flex: 1; min-width: 0; padding: 7px 10px; font-size: 15px; border-color: var(--primary-2); }
+
+/* more than one workout a day */
+.plus-n { position: absolute; top: 3px; left: 4px; font-size: 9px; font-weight: 700; color: var(--primary); }
+.logged-tag { font-family: var(--body); font-size: 12px; font-weight: 600; color: var(--pos); margin-left: 6px; vertical-align: 2px; }
+.day-log-btn { margin: 0 0 16px; }
+.add-workout h3 { margin-top: 0; }
+.log-group { margin: 22px 0 10px; font-size: 20px; }
+.card .btn.block[data-act="quick-done"] { margin-top: 12px; }
