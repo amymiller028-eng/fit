@@ -12,6 +12,7 @@ const whoOf = e => (WHO.some(w => w.id === e.who) ? e.who : 'Both');
 
 // What kind of plan it is, for the insights at the top.
 const US_CATS = [
+  { id: 'none', label: 'No category' },
   { id: 'date', label: 'Date night' },
   { id: 'family', label: 'Family day' },
   { id: 'bigfamily', label: 'Big family day' },
@@ -23,7 +24,7 @@ const US_CATS = [
   { id: 'work', label: 'Work' },
   { id: 'other', label: 'Other' },
 ];
-const catLabel = id => (US_CATS.find(c => c.id === id) || US_CATS[US_CATS.length - 1]).label;
+const catLabel = id => (US_CATS.find(c => c.id === id) || US_CATS[0]).label;
 // Events saved before categories existed get a best guess from their title until you pick one with Edit.
 const CAT_WORDS = [
   ['huey', /\b(huey|vet|groom|groomer|dog park|petco|petsmart|chewy|daycare)\b/i],
@@ -40,7 +41,7 @@ function guessUsCat(e) {
   if (e.who === 'Huey') return 'huey';
   const t = `${e.title || ''} ${e.note || ''}`;
   const hit = CAT_WORDS.find(([, re]) => re.test(t));
-  return hit ? hit[0] : 'other';
+  return hit ? hit[0] : 'none';
 }
 const catOf = e => (US_CATS.some(c => c.id === e.cat) ? e.cat : guessUsCat(e));
 
@@ -51,7 +52,13 @@ let usDay = null;            // selected day
 let usEditing = null;        // event id being edited, or 'new'
 
 const usEvents = () => state.events || (state.events = []);
-const eventsOn = k => usEvents().filter(e => e.date === k).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+const eventEnd = e => (e.endDate && e.endDate > e.date ? e.endDate : e.date);
+const eventsOn = k => usEvents().filter(e => e.date <= k && eventEnd(e) >= k).sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99')));
+// "Nov 20 – 23" for a multi-day event, the time for a one-day event.
+function whenText(e) {
+  if (eventEnd(e) !== e.date) return `${shortDate(e.date)} – ${shortDate(eventEnd(e))}`;
+  return e.time ? timeLabel(e.time) : '';
+}
 
 function usTabs(active) {
   return `<nav class="subtabs us-tabs" aria-label="Amy & Cory">
@@ -89,7 +96,7 @@ function renderUs(arg) {
   }
 
   const dayEvs = eventsOn(usDay);
-  const upcoming = usEvents().filter(e => e.date >= today).sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99'))).slice(0, 6);
+  const upcoming = usEvents().filter(e => eventEnd(e) >= today).sort((a, b) => (a.date + (a.time || '99')).localeCompare(b.date + (b.time || '99'))).slice(0, 6);
 
   app.innerHTML = `
     <div class="page-head"><h1 class="page-title">Amy &amp; Cory</h1></div>
@@ -117,7 +124,7 @@ function renderUs(arg) {
           <span class="dot-who who-${whoOf(e)}" aria-hidden="true"></span>
           <div class="ul-main">
             <b>${esc(e.title)}</b>
-            <small class="muted">${esc(catLabel(catOf(e)))} · ${e.time ? esc(timeLabel(e.time)) + ' · ' : ''}${esc(WHO.find(w => w.id === whoOf(e)).label)}${e.note ? ' · ' + esc(e.note) : ''}</small>
+            <small class="muted">${catOf(e) !== 'none' ? esc(catLabel(catOf(e))) + ' · ' : ''}${whenText(e) ? esc(whenText(e)) + ' · ' : ''}${esc(WHO.find(w => w.id === whoOf(e)).label)}${e.note ? ' · ' + esc(e.note) : ''}</small>
           </div>
           <button class="btn ghost sm" data-act="us-edit" data-id="${e.id}">Edit</button>
         </li>`).join('')}</ul>` : usEditing === 'new' ? '' : '<p class="muted">Nothing planned. Tap <b>+ Add event</b>.</p>'}
@@ -128,7 +135,7 @@ function renderUs(arg) {
       <ul class="us-list upcoming">${upcoming.map(e => `
         <li data-act="us-day" data-k="${e.date}">
           <span class="dot-who who-${whoOf(e)}" aria-hidden="true"></span>
-          <div class="ul-main"><b>${esc(e.title)}</b><small class="muted">${esc(shortDate(e.date))}${e.time ? ' · ' + esc(timeLabel(e.time)) : ''}</small></div>
+          <div class="ul-main"><b>${esc(e.title)}</b><small class="muted">${eventEnd(e) !== e.date ? esc(whenText(e)) : esc(shortDate(e.date)) + (e.time ? ' · ' + esc(timeLabel(e.time)) : '')}</small></div>
         </li>`).join('')}</ul>
     </section>` : ''}
 
@@ -174,7 +181,7 @@ function usInsights() {
   const lastCounted = end > today0 && start <= today0 ? today0 : end;
   const days = Math.max(1, Math.round((lastCounted - start) / 86400000) + 1);
   const dates = evs.filter(e => catOf(e) === 'date');
-  const byCat = US_CATS.map(c => ({ ...c, n: evs.filter(e => catOf(e) === c.id).length })).filter(c => c.n).sort((x, y) => y.n - x.n);
+  const byCat = US_CATS.filter(c => c.id !== 'none').map(c => ({ ...c, n: evs.filter(e => catOf(e) === c.id).length })).filter(c => c.n).sort((x, y) => y.n - x.n);
   const catMax = byCat.length ? byCat[0].n : 1;
   const buckets = usBuckets(start, end, evs);
   const bMax = Math.max(1, ...buckets.map(x => x.n));
@@ -226,13 +233,14 @@ function usInsights() {
 }
 
 function eventForm(e) {
-  const x = e || { title: '', time: '', who: 'Both', note: '', date: usDay, cat: 'date' };
+  const x = e || { title: '', time: '', who: 'Both', note: '', date: usDay, cat: 'none' };
   return `<form class="us-form" data-form="us-event" data-id="${e ? e.id : ''}">
     <label class="field"><span>What</span><input name="title" required maxlength="60" value="${esc(x.title)}" placeholder="e.g. Dinner with Cory's parents"></label>
     <div class="grid2">
       <label class="field"><span>Date</span><input name="date" type="date" required value="${esc(x.date)}"></label>
-      <label class="field"><span>Time (optional)</span><input name="time" type="time" value="${esc(x.time || '')}"></label>
+      <label class="field"><span>Ends (for multi-day)</span><input name="endDate" type="date" value="${esc(x.endDate || '')}"></label>
     </div>
+    <label class="field"><span>Time (optional)</span><input name="time" type="time" value="${esc(x.time || '')}"></label>
     <div class="field"><span>Category</span>
       <div class="cat-chips" role="radiogroup" aria-label="Category">
         ${US_CATS.map(c => `<label class="cat-chip"><input type="radio" name="cat" value="${c.id}" ${catOf(x) === c.id ? 'checked' : ''}><span>${esc(c.label)}</span></label>`).join('')}
@@ -283,7 +291,8 @@ app.addEventListener('submit', e => {
   if (f.dataset.form !== 'us-event') return;
   e.preventDefault();
   const d = Object.fromEntries(new FormData(f));
-  const fields = { title: d.title.trim(), date: d.date || usDay, time: d.time || '', who: d.who || 'Both', cat: d.cat || 'other', note: (d.note || '').trim() };
+  const date = d.date || usDay;
+  const fields = { title: d.title.trim(), date, endDate: d.endDate && d.endDate > date ? d.endDate : '', time: d.time || '', who: d.who || 'Both', cat: d.cat || 'none', note: (d.note || '').trim() };
   if (!fields.title) return;
   const existing = usEvents().find(x => x.id === f.dataset.id);
   if (existing) Object.assign(existing, fields);
