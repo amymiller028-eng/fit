@@ -723,9 +723,9 @@ function renderStoreHistory() {
 
 /* ---------- wishlist ---------- */
 
-// Every workout you logged since a date, counting each workout on a day with more than one.
+// Days you logged a workout since a date. Logged is enough, and two workouts on one day count as one.
 function workoutsSince(k) {
-  return Object.keys(state.logs).filter(d => d >= k && logHasData(state.logs[d])).reduce((n, d) => n + sessionsOn(state.logs[d]), 0);
+  return Object.keys(state.logs).filter(d => d >= k && logHasData(state.logs[d])).length;
 }
 
 function safeUrl(u) {
