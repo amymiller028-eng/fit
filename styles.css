@@ -1014,3 +1014,13 @@ body[data-section="workouts"] .btn.ghost { border-width: 2px; }
 /* library matches under the food box */
 .suggest-label { margin: 10px 0 0; font-size: 12px; }
 .suggest-list { max-height: 360px; overflow-y: auto; }
+
+/* Amy & Cory insights: friend time by person */
+.friend-time { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.friend-time h3 { margin: 0 0 8px; font-size: 15px; }
+.ft-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ft-list li { display: grid; grid-template-columns: 110px 1fr 28px; align-items: center; gap: 4px 8px; font-size: 13px; }
+.ft-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.ft-name .dot-who { width: 10px; height: 10px; }
+.ft-list .hb-track i { background: var(--who); }
+.ft-meta { grid-column: 2 / -1; }

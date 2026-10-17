@@ -229,7 +229,31 @@ function usInsights() {
         ${busiest.n ? `<p class="muted ins-note">Busiest day: <b>${busiest.d}</b></p>` : ''}
       </figure>
     </div>` : `<p class="muted">No plans in this ${usPeriod} yet.</p>`}
+    ${friendTime(all, evs, days)}
   </section>`;
+}
+
+// Friend time for each of you and together: how much this period, how often, and how long since the last one.
+function friendTime(all, evs, days) {
+  const friends = evs.filter(e => catOf(e) === 'friends');
+  const anyEver = all.some(e => catOf(e) === 'friends');
+  if (!anyEver) return '';
+  const rows = [['Amy', 'Amy'], ['Cory', 'Cory'], ['Both', 'Both of us']].map(([id, label]) => {
+    const mine = friends.filter(e => whoOf(e) === id).length;
+    const last = all.filter(e => catOf(e) === 'friends' && whoOf(e) === id && e.date <= todayKey()).map(e => e.date).sort().pop();
+    const since = last ? Math.round((parseKey(todayKey()) - parseKey(last)) / 86400000) : null;
+    return { id, label, n: mine, since, every: mine ? Math.max(1, Math.round(days / mine)) : null };
+  });
+  const max = Math.max(1, ...rows.map(r => r.n));
+  return `<div class="friend-time">
+    <h3>Friend time</h3>
+    <ul class="ft-list">${rows.map(r => `<li class="who-${r.id}" title="${esc(r.label)}: ${r.n} friend plan${r.n === 1 ? '' : 's'}">
+      <span class="ft-name"><i class="dot-who"></i>${esc(r.label)}</span>
+      <span class="hb-track"><i style="width:${r.n / max * 100}%"></i></span>
+      <span class="hb-val">${r.n}</span>
+      <small class="muted ft-meta">${r.every ? `about every ${r.every} days · ` : ''}${r.since === null ? 'none yet' : r.since === 0 ? 'last: today' : `last: ${r.since} days ago`}</small>
+    </li>`).join('')}</ul>
+  </div>`;
 }
 
 function eventForm(e) {
