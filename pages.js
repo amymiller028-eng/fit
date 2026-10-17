@@ -723,8 +723,9 @@ function renderStoreHistory() {
 
 /* ---------- wishlist ---------- */
 
+// Every workout you logged since a date, counting each workout on a day with more than one.
 function workoutsSince(k) {
-  return Object.keys(state.logs).filter(d => d >= k && state.logs[d].done && logHasData(state.logs[d])).length;
+  return Object.keys(state.logs).filter(d => d >= k && logHasData(state.logs[d])).reduce((n, d) => n + sessionsOn(state.logs[d]), 0);
 }
 
 function safeUrl(u) {
@@ -739,9 +740,14 @@ function noSpendSince(k) {
   return (state.noSpendDates || []).filter(d => d >= k).length;
 }
 
-const WISH_GOALS = { workouts: 'workouts', nospend: 'no-spend days' };
-const wishProgress = x => (x.goalType === 'nospend' ? noSpendSince(x.added) : workoutsSince(x.added));
-const wishEarned = x => !!x.goal && wishProgress(x) >= x.goal;
+// An item can need workouts, no-spend days, or both. Older items had one goal plus a type.
+const woGoalOf = x => num(x.woGoal !== undefined ? x.woGoal : (x.goalType === 'nospend' ? 0 : x.goal));
+const nsGoalOf = x => num(x.nsGoal !== undefined ? x.nsGoal : (x.goalType === 'nospend' ? x.goal : 0));
+const sinceOf = x => x.since || x.added || todayKey();
+const hasGoal = x => woGoalOf(x) > 0 || nsGoalOf(x) > 0;
+const wishEarned = x => hasGoal(x)
+  && (!woGoalOf(x) || workoutsSince(sinceOf(x)) >= woGoalOf(x))
+  && (!nsGoalOf(x) || noSpendSince(sinceOf(x)) >= nsGoalOf(x));
 let wishEditing = null;
 
 function wishFields(x) {
@@ -749,12 +755,23 @@ function wishFields(x) {
     <label class="field"><span>What is it?</span><input name="name" required maxlength="60" value="${esc(x.name || '')}" placeholder="e.g. Ribbed matching set"></label>
     <div class="grid2">
       <label class="field"><span>Price $</span><input name="price" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(x.price || '')}"></label>
-      <label class="field"><span>Link (optional)</span><input name="url" type="text" inputmode="url" autocomplete="off" value="${esc(x.url || '')}" placeholder="Paste a link"></label>
+      <label class="field"><span>Count from</span><input name="since" type="date" value="${esc(x.id ? sinceOf(x) : todayKey())}"></label>
     </div>
-    <div class="earn-row">
-      <label class="field"><span>Earn it after</span><input name="goal" type="number" inputmode="numeric" min="0" value="${esc(x.goal || '')}" placeholder="#"></label>
-      <label class="field"><span>&nbsp;</span><select name="goalType">${Object.entries(WISH_GOALS).map(([k, v]) => `<option value="${k}" ${(x.goalType || 'workouts') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    <label class="field link-field"><span>Link (optional)</span><input name="url" type="text" inputmode="url" autocomplete="off" value="${esc(x.url || '')}" placeholder="Paste a link"></label>
+    <div class="earn-goals">
+      <span class="earn-title">Earn it with (one or both)</span>
+      <div class="grid2">
+        <label class="field"><span>Workouts</span><input name="woGoal" type="number" inputmode="numeric" min="0" value="${esc(woGoalOf(x) || '')}" placeholder="e.g. 15"></label>
+        <label class="field"><span>No-spend days</span><input name="nsGoal" type="number" inputmode="numeric" min="0" value="${esc(nsGoalOf(x) || '')}" placeholder="e.g. 5"></label>
+      </div>
     </div>`;
+}
+
+function goalBar(have, need, label, kind) {
+  return `<div class="goal-part">
+    <div class="fbar ${kind}"><i style="width:${Math.min(100, have / need * 100)}%"></i></div>
+    <small>${have >= need ? `✓ ${need} ${label}` : `${have} / ${need} ${label}`}</small>
+  </div>`;
 }
 
 function renderWish() {
@@ -766,19 +783,20 @@ function renderWish() {
 
   const card = x => {
     if (wishEditing === x.id) {
-      return `<article class="wish editing"><form data-form="wish-edit" data-id="${x.id}">${wishFields(x)}
+      return `<article class="wish editing"><form data-form="wish-edit" data-id="${x.id}"><h3>Edit item</h3>${wishFields(x)}
         <div class="row-btns left"><button class="btn primary sm" type="submit">Save</button><button class="btn ghost sm" type="button" data-act="wish-cancel">Cancel</button></div>
       </form></article>`;
     }
-    const done = x.goal ? wishProgress(x) : 0;
     const earned = wishEarned(x);
+    const wo = woGoalOf(x), ns = nsGoalOf(x), since = sinceOf(x);
     if (earned && !x.celebrated && !x.bought) { x.celebrated = true; celebrate = true; }
     return `<article class="wish ${earned ? 'earned' : ''} ${x.bought ? 'bought' : ''}">
       <h3>${esc(x.name)}</h3>
       ${num(x.price) ? `<div class="price">$${r1(num(x.price)).toLocaleString()}</div>` : ''}
-      ${x.goal && !x.bought ? `<div class="earn">
-          <div class="fbar ${x.goalType === 'nospend' ? 'nospend' : ''}"><i style="width:${Math.min(100, done / x.goal * 100)}%"></i></div>
-          <small>${earned ? '<span class="earned-tag">Earned. Treat yourself.</span>' : `${done} / ${x.goal} ${WISH_GOALS[x.goalType || 'workouts']} to earn it`}</small>
+      ${hasGoal(x) && !x.bought ? `<div class="earn">
+          ${wo ? goalBar(workoutsSince(since), wo, 'workouts', '') : ''}
+          ${ns ? goalBar(noSpendSince(since), ns, 'no-spend days', 'nospend') : ''}
+          <small class="muted">${earned ? '<span class="earned-tag">Earned. Treat yourself.</span>' : `Counting since ${esc(shortDate(since))}`}</small>
         </div>` : ''}
       <div class="wish-actions">
         ${x.url ? `<a class="btn ghost sm" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">View</a>` : ''}
@@ -789,7 +807,7 @@ function renderWish() {
     </article>`;
   };
 
-  const usesNoSpend = list.some(x => x.goalType === 'nospend' && !x.bought);
+  const usesNoSpend = list.some(x => nsGoalOf(x) > 0 && !x.bought);
   app.innerHTML = `
     <div class="page-head">
       <h1 class="page-title">Wishlist</h1>
@@ -801,7 +819,7 @@ function renderWish() {
         <button class="btn primary block" type="submit">Add to wishlist</button>
       </form>
     </details>
-    ${usesNoSpend ? `<p class="muted wish-note">No-spend days count from the day you add an item. They update each time you open Money.</p>` : ''}
+    ${usesNoSpend ? `<p class="muted wish-note">No-spend days update each time you open Money.</p>` : ''}
     ${open.length ? `<div class="wish-grid">${open.sort((a, b) => wishEarned(b) - wishEarned(a)).map(card).join('')}</div>`
       : `<div class="empty"><p>Add clothes, gear and treats. Earn each one with workouts or no-spend days.</p></div>`}
     ${bought.length ? `<details class="card"><summary><b>Bought (${bought.length})</b></summary><div class="wish-grid">${bought.map(card).join('')}</div></details>` : ''}
@@ -945,18 +963,21 @@ app.addEventListener('submit', e => {
     if (!state.wish) state.wish = [];
     state.wish.unshift({
       id: uid(), name: d.name.trim(), price: d.price, url: safeUrl(d.url),
-      goal: Math.max(0, Math.round(num(d.goal))), goalType: d.goalType || 'workouts', added: todayKey(), bought: false,
+      woGoal: Math.max(0, Math.round(num(d.woGoal))), nsGoal: Math.max(0, Math.round(num(d.nsGoal))),
+      since: d.since || todayKey(), added: todayKey(), bought: false,
     });
     save(); toast('Added to your wishlist'); renderWish();
   }
   if (form === 'wish-edit') {
     const x = (state.wish || []).find(w => w.id === f.dataset.id);
     if (!x) return;
-    const goal = Math.max(0, Math.round(num(d.goal)));
-    const goalType = d.goalType || 'workouts';
+    const woGoal = Math.max(0, Math.round(num(d.woGoal)));
+    const nsGoal = Math.max(0, Math.round(num(d.nsGoal)));
+    const since = d.since || sinceOf(x);
     // A new goal means a fresh chance to celebrate when it's reached.
-    if (goal !== x.goal || goalType !== (x.goalType || 'workouts')) x.celebrated = false;
-    Object.assign(x, { name: d.name.trim() || x.name, price: d.price, url: safeUrl(d.url), goal, goalType });
+    if (woGoal !== woGoalOf(x) || nsGoal !== nsGoalOf(x) || since !== sinceOf(x)) x.celebrated = false;
+    Object.assign(x, { name: d.name.trim() || x.name, price: d.price, url: safeUrl(d.url), woGoal, nsGoal, since });
+    delete x.goal; delete x.goalType;
     wishEditing = null;
     save(); toast('Saved'); const y = window.scrollY; renderWish(); window.scrollTo(0, y);
   }
